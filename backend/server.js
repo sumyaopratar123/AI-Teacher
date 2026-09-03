@@ -1,7 +1,6 @@
 // ==========================================
 // AI TEACHER - BACKEND SERVER
-// FULL REPLACEMENT CODE
-// PERSONALIZED LEARNING VERSION
+// COMPLETE VERSION
 // ==========================================
 
 require("dotenv").config();
@@ -11,10 +10,10 @@ const cors = require("cors");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-
-const pdfParseModule = require("pdf-parse");
-
-const { GoogleGenAI } = require("@google/genai");
+const pdfParse = require("pdf-parse");
+const {
+  GoogleGenerativeAI,
+} = require("@google/generative-ai");
 
 // ==========================================
 // APP
@@ -25,15 +24,14 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ==========================================
-// CORS
+// MIDDLEWARE
 // ==========================================
 
+// CORS
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-    ],
+    origin: true,
+    credentials: true,
     methods: [
       "GET",
       "POST",
@@ -48,16 +46,14 @@ app.use(
   })
 );
 
-// ==========================================
-// BODY PARSER
-// ==========================================
-
+// JSON body
 app.use(
   express.json({
     limit: "50mb",
   })
 );
 
+// URL encoded body
 app.use(
   express.urlencoded({
     extended: true,
@@ -66,7 +62,7 @@ app.use(
 );
 
 // ==========================================
-// FOLDERS
+// DIRECTORIES
 // ==========================================
 
 const uploadDir = path.join(
@@ -79,46 +75,24 @@ const assetsDir = path.join(
   "assets"
 );
 
-const downloadsDir = path.join(
-  __dirname,
-  "downloads"
-);
+// Create uploads directory
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, {
+    recursive: true,
+  });
+}
 
-// ==========================================
-// CREATE FOLDERS
-// ==========================================
+// Create assets directory
+if (!fs.existsSync(assetsDir)) {
+  fs.mkdirSync(assetsDir, {
+    recursive: true,
+  });
+}
 
-[
-  uploadDir,
-  assetsDir,
-  downloadsDir,
-].forEach((folder) => {
-
-  if (!fs.existsSync(folder)) {
-
-    fs.mkdirSync(
-      folder,
-      {
-        recursive: true,
-      }
-    );
-
-  }
-
-});
-
-// ==========================================
-// STATIC FILES
-// ==========================================
-
+// Static assets
 app.use(
   "/assets",
   express.static(assetsDir)
-);
-
-app.use(
-  "/downloads",
-  express.static(downloadsDir)
 );
 
 // ==========================================
@@ -132,161 +106,77 @@ const GEMINI_MODEL =
   process.env.GEMINI_MODEL ||
   "gemini-3.6-flash";
 
-let ai = null;
+let genAI = null;
 
+// Check Gemini key
 if (
   GEMINI_API_KEY &&
   GEMINI_API_KEY.trim()
 ) {
+  try {
+    genAI =
+      new GoogleGenerativeAI(
+        GEMINI_API_KEY
+      );
 
-  ai = new GoogleGenAI({
-    apiKey:
-      GEMINI_API_KEY.trim(),
-  });
-
-  console.log(
-    "Gemini AI configured successfully."
-  );
-
+    console.log(
+      "Gemini AI configured successfully."
+    );
+  } catch (error) {
+    console.error(
+      "Gemini configuration error:",
+      error.message
+    );
+  }
 } else {
-
   console.log(
     "WARNING: GEMINI_API_KEY is missing."
   );
-
 }
 
 // ==========================================
-// GEMINI RESPONSE TEXT
-// ==========================================
-
-function getGeminiText(
-  response
-) {
-
-  if (!response) {
-
-    return "";
-
-  }
-
-  if (
-    typeof response.text ===
-    "string"
-  ) {
-
-    return response.text.trim();
-
-  }
-
-  if (
-    typeof response.text ===
-    "function"
-  ) {
-
-    const result =
-      response.text();
-
-    if (
-      typeof result ===
-      "string"
-    ) {
-
-      return result.trim();
-
-    }
-
-  }
-
-  if (
-    response.candidates &&
-    response.candidates[0] &&
-    response.candidates[0].content &&
-    response.candidates[0].content.parts
-  ) {
-
-    return response.candidates[0]
-      .content
-      .parts
-      .map(
-        (part) =>
-          part.text || ""
-      )
-      .join("")
-      .trim();
-
-  }
-
-  return "";
-
-}
-
-// ==========================================
-// GENERATE AI RESPONSE
+// AI GENERATE FUNCTION
 // ==========================================
 
 async function generateAIResponse(
-  prompt,
-  options = {}
+  prompt
 ) {
-
-  if (!ai) {
-
+  // Check Gemini
+  if (!genAI) {
     throw new Error(
-      "Gemini API is not configured. Please check GEMINI_API_KEY in .env file."
+      "Gemini API is not configured. Please check GEMINI_API_KEY."
     );
-
   }
 
-  console.log(
-    "Using Gemini model:",
-    GEMINI_MODEL
-  );
-
   try {
+    console.log(
+      "Using Gemini model:",
+      GEMINI_MODEL
+    );
 
-    const request = {
+    const model =
+      genAI.getGenerativeModel({
+        model: GEMINI_MODEL,
+      });
 
-      model:
-        GEMINI_MODEL,
-
-      contents:
-        prompt,
-
-    };
-
-    if (
-      options.responseMimeType
-    ) {
-
-      request.config = {
-
-        responseMimeType:
-          options.responseMimeType,
-
-      };
-
-    }
+    const result =
+      await model.generateContent(
+        prompt
+      );
 
     const response =
-      await ai.models.generateContent(
-        request
-      );
+      result.response;
 
     const text =
-      getGeminiText(
-        response
-      );
+      response.text();
 
     if (
       !text ||
       !text.trim()
     ) {
-
       throw new Error(
-        "Gemini AI did not return any text."
+        "AI did not return a response."
       );
-
     }
 
     return text.trim();
@@ -295,241 +185,97 @@ async function generateAIResponse(
 
     console.error(
       "Gemini Generate Error:",
-      error
+      error.message
     );
 
-    throw new Error(
-      error.message ||
-      "Failed to generate AI response."
-    );
-
+    throw error;
   }
-
 }
 
 // ==========================================
-// PDF PARSER
-// ==========================================
-
-async function extractPdfText(
-  pdfBuffer
-) {
-
-  if (
-    typeof pdfParseModule ===
-    "function"
-  ) {
-
-    const result =
-      await pdfParseModule(
-        pdfBuffer
-      );
-
-    return {
-
-      text:
-        result.text || "",
-
-      numpages:
-        result.numpages || 1,
-
-    };
-
-  }
-
-  if (
-    pdfParseModule &&
-    typeof pdfParseModule.default ===
-    "function"
-  ) {
-
-    const result =
-      await pdfParseModule.default(
-        pdfBuffer
-      );
-
-    return {
-
-      text:
-        result.text || "",
-
-      numpages:
-        result.numpages || 1,
-
-    };
-
-  }
-
-  if (
-    pdfParseModule &&
-    pdfParseModule.PDFParse
-  ) {
-
-    const PDFParse =
-      pdfParseModule.PDFParse;
-
-    let parser = null;
-
-    try {
-
-      parser =
-        new PDFParse({
-
-          data:
-            new Uint8Array(
-              pdfBuffer
-            ),
-
-        });
-
-      const result =
-        await parser.getText();
-
-      return {
-
-        text:
-          result.text || "",
-
-        numpages:
-          result.total ||
-          result.numpages ||
-          result.numPages ||
-          1,
-
-      };
-
-    } finally {
-
-      if (
-        parser &&
-        typeof parser.destroy ===
-        "function"
-      ) {
-
-        try {
-
-          await parser.destroy();
-
-        } catch (error) {
-
-          console.log(
-            "PDF cleanup warning:",
-            error.message
-          );
-
-        }
-
-      }
-
-    }
-
-  }
-
-  throw new Error(
-    "Unsupported pdf-parse package version."
-  );
-
-}
-
-// ==========================================
-// MULTER STORAGE
+// MULTER CONFIGURATION
 // ==========================================
 
 const storage =
   multer.diskStorage({
 
-    destination:
-      (
-        req,
-        file,
-        cb
-      ) => {
-
-        cb(
-          null,
-          uploadDir
-        );
-
-      },
-
-    filename:
-      (
-        req,
-        file,
-        cb
-      ) => {
-
-        const safeName =
-          file.originalname.replace(
-            /[^a-zA-Z0-9.\-_]/g,
-            "-"
-          );
-
-        const uniqueName =
-          Date.now() +
-          "-" +
-          Math.round(
-            Math.random() *
-            1000000
-          ) +
-          "-" +
-          safeName;
-
-        cb(
-          null,
-          uniqueName
-        );
-
-      },
-
-  });
-
-// ==========================================
-// FILE FILTER
-// ==========================================
-
-const fileFilter =
-  (
-    req,
-    file,
-    cb
-  ) => {
-
-    const isPDF =
-
-      file.mimetype ===
-      "application/pdf"
-
-      ||
-
-      file.originalname
-        .toLowerCase()
-        .endsWith(
-          ".pdf"
-        );
-
-    if (isPDF) {
+    destination: (
+      req,
+      file,
+      cb
+    ) => {
 
       cb(
         null,
-        true
+        uploadDir
       );
+    },
 
-    } else {
+    filename: (
+      req,
+      file,
+      cb
+    ) => {
+
+      const safeName =
+        file.originalname.replace(
+          /[^a-zA-Z0-9.\-_]/g,
+          "-"
+        );
+
+      const uniqueName =
+        Date.now() +
+        "-" +
+        Math.round(
+          Math.random() * 1000000
+        ) +
+        "-" +
+        safeName;
 
       cb(
-        new Error(
-          "Only PDF files are allowed."
-        ),
-        false
+        null,
+        uniqueName
       );
-
-    }
-
-  };
+    },
+  });
 
 // ==========================================
-// UPLOAD
+// PDF FILE FILTER
+// ==========================================
+
+const fileFilter = (
+  req,
+  file,
+  cb
+) => {
+
+  const isPDF =
+    file.mimetype ===
+      "application/pdf" ||
+    file.originalname
+      .toLowerCase()
+      .endsWith(".pdf");
+
+  if (isPDF) {
+
+    cb(
+      null,
+      true
+    );
+
+  } else {
+
+    cb(
+      new Error(
+        "Only PDF files are allowed."
+      ),
+      false
+    );
+  }
+};
+
+// ==========================================
+// UPLOAD CONFIGURATION
 // ==========================================
 
 const upload =
@@ -542,56 +288,75 @@ const upload =
     limits: {
 
       fileSize:
-        25 *
+        20 *
         1024 *
         1024,
-
     },
-
   });
 
 // ==========================================
-// TEMP PDF STORAGE
+// MEMORY STORAGE
 // ==========================================
 
-const uploadedDocuments =
-  {};
+// Store uploaded PDF information
+const uploadedDocuments = {};
 
 // ==========================================
-// CLEAN JSON
+// HELPER FUNCTION
 // ==========================================
 
-function cleanJsonText(
-  text
-) {
+function cleanText(text) {
 
   if (!text) {
-
     return "";
+  }
 
+  return String(text)
+    .trim();
+}
+
+// ==========================================
+// CLEAN JSON TEXT
+// ==========================================
+
+function cleanJsonText(text) {
+
+  if (!text) {
+    return "";
   }
 
   let cleaned =
-    text
-      .replace(
-        /```json/gi,
-        ""
-      )
-      .replace(
-        /```/g,
-        ""
-      )
+    String(text)
       .trim();
 
-  const firstBrace =
-    cleaned.indexOf(
-      "{"
+  // Remove markdown code block
+  cleaned =
+    cleaned.replace(
+      /^```json/i,
+      ""
     );
 
-  const lastBrace =
-    cleaned.lastIndexOf(
-      "}"
+  cleaned =
+    cleaned.replace(
+      /^```/,
+      ""
     );
+
+  cleaned =
+    cleaned.replace(
+      /```$/i,
+      ""
+    );
+
+  cleaned =
+    cleaned.trim();
+
+  // Find JSON object
+  const firstBrace =
+    cleaned.indexOf("{");
+
+  const lastBrace =
+    cleaned.lastIndexOf("}");
 
   if (
     firstBrace !== -1 &&
@@ -603,154 +368,49 @@ function cleanJsonText(
         firstBrace,
         lastBrace + 1
       );
-
   }
 
   return cleaned;
-
 }
 
 // ==========================================
-// PERSONALIZATION HELPER
+// GET BASE URL
 // ==========================================
 
-function getPreferences(
-  body = {}
-) {
+function getBaseUrl(req) {
 
-  const level =
-    [
-      "Beginner",
-      "Intermediate",
-      "Advanced",
-    ].includes(body.level)
-      ? body.level
-      : "Beginner";
-
-  const language =
-    [
-      "English",
-      "Hindi",
-      "Marathi",
-    ].includes(body.language)
-      ? body.language
-      : "English";
-
-  const allowedTimes =
-    ["10", "20", "30"];
-
-  const learningTime =
-    allowedTimes.includes(
-      String(
-        body.learningTime
-      )
-    )
-      ? String(
-          body.learningTime
-        )
-      : "20";
-
-  return {
-
-    level,
-
-    language,
-
-    learningTime,
-
-  };
-
+  return (
+    req.protocol +
+    "://" +
+    req.get("host")
+  );
 }
 
 // ==========================================
-// PERSONALIZATION PROMPT
-// ==========================================
-
-function getPersonalizationPrompt(
-  preferences
-) {
-
-  return `
-
-STUDENT PERSONALIZATION:
-
-Learning Level:
-${preferences.level}
-
-Preferred Language:
-${preferences.language}
-
-Available Learning Time:
-${preferences.learningTime} minutes
-
-IMPORTANT PERSONALIZATION RULES:
-
-1. Adapt the explanation to the student's learning level.
-
-2. Beginner:
-Use very simple words, explain basic concepts slowly,
-and provide easy examples.
-
-3. Intermediate:
-Use moderate technical detail and explain important concepts
-with practical examples.
-
-4. Advanced:
-Provide deeper concepts, technical details,
-and more challenging explanations.
-
-5. Generate the teaching content primarily in:
-${preferences.language}
-
-6. Adjust the amount and depth of content for approximately:
-${preferences.learningTime} minutes.
-
-7. Make the lesson student-friendly and easy to understand.
-
-`;
-
-}
-
-// ==========================================
-// FALLBACK SLIDES
+// CREATE FALLBACK SLIDES
 // ==========================================
 
 function createFallbackSlides(
   text,
-  subject
+  topic
 ) {
 
-  const cleanText =
-    (
-      text ||
-      ""
-    )
-      .replace(
-        /[#*`]/g,
-        ""
-      )
-      .trim();
-
-  if (!cleanText) {
+  if (!text) {
 
     return [
-
       {
-
         title:
-          `Introduction to ${subject}`,
+          topic ||
+          "AI Learning Lesson",
 
         narration:
-          `${subject} is an important topic. Let us understand it step by step.`,
-
+          "Welcome to your AI learning lesson.",
       },
-
     ];
-
   }
 
   const paragraphs =
-    cleanText
+    String(text)
       .split(
         /\n\s*\n/
       )
@@ -763,11 +423,14 @@ function createFallbackSlides(
           item.length > 30
       );
 
-  let slides =
-    paragraphs
+  if (
+    paragraphs.length > 0
+  ) {
+
+    return paragraphs
       .slice(
         0,
-        7
+        8
       )
       .map(
         (
@@ -776,42 +439,28 @@ function createFallbackSlides(
         ) => ({
 
           title:
-            `Lesson Part ${
-              index + 1
-            }`,
+            `Lesson Part ${index + 1}`,
 
           narration:
             paragraph,
-
         })
       );
-
-  if (
-    slides.length === 0
-  ) {
-
-    slides = [
-
-      {
-
-        title:
-          `Introduction to ${subject}`,
-
-        narration:
-          cleanText,
-
-      },
-
-    ];
-
   }
 
-  return slides;
+  return [
+    {
+      title:
+        topic ||
+        "AI Learning Lesson",
 
+      narration:
+        String(text),
+    },
+  ];
 }
 
 // ==========================================
-// HOME
+// HOME ROUTE
 // ==========================================
 
 app.get(
@@ -823,8 +472,7 @@ app.get(
 
     res.json({
 
-      success:
-        true,
+      success: true,
 
       message:
         "AI Teacher Backend is Running",
@@ -834,25 +482,22 @@ app.get(
         health:
           "/api/health",
 
+        studyGenerate:
+          "/api/study/generate",
+
         upload:
           "/api/study/upload",
 
         explain:
           "/api/study/explain",
 
-        lesson:
+        video:
           "/api/video/generate",
-
-        mcq:
-          "/api/study/mcq",
 
         teacherVideo:
           "/api/teacher-video",
-
       },
-
     });
-
   }
 );
 
@@ -867,102 +512,243 @@ app.get(
     res
   ) => {
 
-    const videoPath =
-      path.join(
-        assetsDir,
-        "teacher-classroom.mp4"
-      );
+    return res.json({
 
-    const videoExists =
-      fs.existsSync(
-        videoPath
-      );
-
-    res.json({
-
-      success:
-        true,
+      success: true,
 
       message:
         "Backend is working properly",
 
       geminiConfigured:
-        !!ai,
+        !!GEMINI_API_KEY,
 
       model:
         GEMINI_MODEL,
 
-      videoAvailable:
-        videoExists,
-
-      videoUrl:
-        videoExists
-          ? `http://localhost:${PORT}/assets/teacher-classroom.mp4`
-          : "",
-
+      environment:
+        process.env.VERCEL
+          ? "Vercel"
+          : "Local",
     });
-
   }
 );
 
 // ==========================================
-// TEACHER VIDEO
+// STUDY GENERATE
+// IMPORTANT ROUTE
+// THIS FIXES:
+// POST /api/study/generate
 // ==========================================
 
-app.get(
-  "/api/teacher-video",
-  (
+app.post(
+  "/api/study/generate",
+  async (
     req,
     res
   ) => {
 
-    const videoPath =
-      path.join(
-        assetsDir,
-        "teacher-classroom.mp4"
+    try {
+
+      console.log(
+        "================================="
       );
 
-    if (
-      !fs.existsSync(
-        videoPath
-      )
-    ) {
+      console.log(
+        "STUDY GENERATE REQUEST RECEIVED"
+      );
+
+      console.log(
+        "Request Body:",
+        req.body
+      );
+
+      // ==================================
+      // GET DATA
+      // ==================================
+
+      const topic =
+        cleanText(
+          req.body.topic
+        );
+
+      const subject =
+        cleanText(
+          req.body.subject
+        );
+
+      const level =
+        cleanText(
+          req.body.level
+        ) ||
+        "Beginner";
+
+      const language =
+        cleanText(
+          req.body.language
+        ) ||
+        "English";
+
+      const learningTime =
+        cleanText(
+          req.body.learningTime
+        ) ||
+        cleanText(
+          req.body.time
+        ) ||
+        "20 Minutes";
+
+      // ==================================
+      // FINAL TOPIC
+      // ==================================
+
+      const finalTopic =
+        topic ||
+        subject;
+
+      // ==================================
+      // VALIDATION
+      // ==================================
+
+      if (!finalTopic) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            message:
+              "Please enter a topic.",
+          });
+      }
+
+      // ==================================
+      // AI PROMPT
+      // ==================================
+
+      const prompt = `
+You are an expert AI teacher.
+
+Create a complete personalized learning lesson.
+
+STUDENT TOPIC:
+${finalTopic}
+
+STUDENT LEVEL:
+${level}
+
+LANGUAGE:
+${language}
+
+AVAILABLE LEARNING TIME:
+${learningTime}
+
+Create a clear educational lesson.
+
+Use this structure:
+
+1. Introduction
+
+2. Definition
+
+3. Important Concepts
+
+4. Detailed Explanation
+
+5. Examples
+
+6. Real World Applications
+
+7. Key Points to Remember
+
+8. Summary
+
+Rules:
+
+- Explain in simple language.
+- Make it suitable for the student's level.
+- Use clear headings.
+- Use bullet points when useful.
+- Include examples.
+- Make it useful for examination preparation.
+- Do not include programming code unless necessary.
+- Do not write instructions for another AI.
+- Do not mention that you are an AI.
+
+Generate the lesson now.
+`;
+
+      // ==================================
+      // GENERATE AI RESPONSE
+      // ==================================
+
+      const explanation =
+        await generateAIResponse(
+          prompt
+        );
+
+      console.log(
+        "Study lesson generated successfully."
+      );
+
+      // ==================================
+      // RESPONSE
+      // ==================================
 
       return res
-        .status(404)
+        .status(200)
+        .json({
+
+          success:
+            true,
+
+          message:
+            "Study lesson generated successfully.",
+
+          topic:
+            finalTopic,
+
+          level:
+            level,
+
+          language:
+            language,
+
+          learningTime:
+            learningTime,
+
+          explanation:
+            explanation,
+
+          content:
+            explanation,
+        });
+
+    } catch (error) {
+
+      console.error(
+        "Study Generate Error:",
+        error
+      );
+
+      return res
+        .status(500)
         .json({
 
           success:
             false,
 
           message:
-            "Teacher video was not found.",
-
-          expectedFile:
-            "backend/assets/teacher-classroom.mp4",
-
+            error.message ||
+            "Failed to generate study lesson.",
         });
-
     }
-
-    return res.json({
-
-      success:
-        true,
-
-      videoAvailable:
-        true,
-
-      videoUrl:
-        `http://localhost:${PORT}/assets/teacher-classroom.mp4`,
-
-    });
-
   }
 );
 
 // ==========================================
-// PDF UPLOAD
+// PDF UPLOAD ROUTE
 // ==========================================
 
 app.post(
@@ -979,6 +765,15 @@ app.post(
 
     try {
 
+      console.log(
+        "================================="
+      );
+
+      console.log(
+        "PDF UPLOAD REQUEST"
+      );
+
+      // Check file
       if (!req.file) {
 
         return res
@@ -990,24 +785,18 @@ app.post(
 
             message:
               "Please select a PDF file.",
-
           });
-
       }
 
-      const topic =
-        (
-          req.body.topic ||
-          ""
-        ).trim();
-
+      // Read PDF
       const pdfBuffer =
         fs.readFileSync(
           req.file.path
         );
 
+      // Parse PDF
       const pdfData =
-        await extractPdfText(
+        await pdfParse(
           pdfBuffer
         );
 
@@ -1015,6 +804,7 @@ app.post(
         pdfData.text ||
         "";
 
+      // Store document
       uploadedDocuments[
         req.file.filename
       ] = {
@@ -1025,23 +815,19 @@ app.post(
         savedName:
           req.file.filename,
 
-        topic,
-
         text:
           extractedText,
 
         totalPages:
           pdfData.numpages ||
-          1,
+          0,
 
         uploadedAt:
           new Date(),
-
       };
 
       console.log(
-        "PDF uploaded successfully:",
-        req.file.originalname
+        "PDF uploaded successfully."
       );
 
       return res.json({
@@ -1052,23 +838,18 @@ app.post(
         message:
           "PDF uploaded successfully.",
 
-        file: {
+        fileName:
+          req.file.filename,
 
-          fileName:
-            req.file.filename,
+        originalName:
+          req.file.originalname,
 
-          originalName:
-            req.file.originalname,
+        totalPages:
+          pdfData.numpages ||
+          0,
 
-          totalPages:
-            pdfData.numpages ||
-            1,
-
-          textLength:
-            extractedText.length,
-
-        },
-
+        textLength:
+          extractedText.length,
       });
 
     } catch (error) {
@@ -1088,17 +869,13 @@ app.post(
           message:
             error.message ||
             "PDF upload failed.",
-
         });
-
     }
-
   }
 );
 
 // ==========================================
-// GENERATE STUDY NOTES
-// PERSONALIZED
+// STUDY EXPLAIN ROUTE
 // ==========================================
 
 app.post(
@@ -1111,25 +888,27 @@ app.post(
 
     try {
 
-      const {
-        topic,
-        fileName,
-      } = req.body;
+      console.log(
+        "STUDY EXPLAIN REQUEST"
+      );
 
-      const preferences =
-        getPreferences(
-          req.body
+      const topic =
+        cleanText(
+          req.body.topic
         );
 
-      let subject =
-        (
-          topic ||
-          ""
-        ).trim();
+      const fileName =
+        cleanText(
+          req.body.fileName
+        );
 
       let pdfContent =
         "";
 
+      let pdfInfo =
+        null;
+
+      // Get PDF content
       if (
         fileName &&
         uploadedDocuments[
@@ -1137,112 +916,145 @@ app.post(
         ]
       ) {
 
-        const document =
+        pdfInfo =
           uploadedDocuments[
             fileName
           ];
 
         pdfContent =
-          document.text ||
+          pdfInfo.text ||
           "";
-
-        if (
-          !subject &&
-          document.topic
-        ) {
-
-          subject =
-            document.topic;
-
-        }
-
       }
 
-      if (!subject) {
+      // Validation
+      if (
+        !topic &&
+        !pdfContent
+      ) {
 
-        subject =
-          "the uploaded study material";
+        return res
+          .status(400)
+          .json({
 
+            success:
+              false,
+
+            message:
+              "Please enter a topic or upload a PDF.",
+          });
       }
 
-      const limitedContent =
-        pdfContent.substring(
-          0,
-          15000
-        );
+      // Limit PDF content
+      if (
+        pdfContent.length >
+        25000
+      ) {
 
-      const prompt =
-        `
-You are an expert teacher and educational content writer.
+        pdfContent =
+          pdfContent.substring(
+            0,
+            25000
+          );
+      }
 
-Create high quality and properly structured study notes.
+      // Subject
+      const finalTopic =
+        topic ||
+        "Study Material";
+
+      // Prompt
+      let prompt = `
+You are an expert teacher.
+
+Create detailed and easy study notes.
 
 TOPIC:
-${subject}
 
-STUDY MATERIAL:
-${limitedContent || "No PDF was provided. Explain the topic using your knowledge."}
-
-${getPersonalizationPrompt(preferences)}
-
-Create detailed notes using this structure:
-
-# ${subject}
-
-## Introduction
-
-## Definition
-
-## Important Concepts
-
-## Detailed Explanation
-
-## Important Terms
-
-## Examples
-
-## Advantages or Importance
-
-## Key Points for Examination
-
-## Summary
-
-RULES:
-
-- Use clear headings.
-- Use bullet points where necessary.
-- Give useful examples.
-- Make notes suitable for exam preparation.
-- Do not mention that you are an AI.
-- Return only the study notes.
+${finalTopic}
 `;
 
-      console.log(
-        "Generating personalized AI study notes..."
-      );
+      if (
+        pdfContent
+      ) {
 
+        prompt += `
+
+PDF CONTENT:
+
+${pdfContent}
+`;
+      }
+
+      prompt += `
+
+Use the following structure:
+
+# Introduction
+
+# Definition
+
+# Important Concepts
+
+# Detailed Explanation
+
+# Examples
+
+# Applications
+
+# Key Points
+
+# Summary
+
+Rules:
+
+- Use simple English.
+- Make content beginner friendly.
+- Explain step by step.
+- Use bullet points.
+- Make content useful for exams.
+`;
+
+      // Generate
       const explanation =
         await generateAIResponse(
           prompt
         );
 
+      // Response
       return res.json({
 
         success:
           true,
 
-        subject,
+        topic:
+          finalTopic,
 
-        explanation,
+        explanation:
+          explanation,
 
-        preferences,
+        content:
+          explanation,
 
+        file:
+          pdfInfo
+            ? {
+
+                fileName:
+                  pdfInfo.savedName,
+
+                originalName:
+                  pdfInfo.originalName,
+
+                totalPages:
+                  pdfInfo.totalPages,
+              }
+            : null,
       });
 
     } catch (error) {
 
       console.error(
-        "Explanation Error:",
+        "Study Explain Error:",
         error
       );
 
@@ -1255,18 +1067,14 @@ RULES:
 
           message:
             error.message ||
-            "Failed to generate study notes.",
-
+            "AI explanation failed.",
         });
-
     }
-
   }
 );
 
 // ==========================================
-// GENERATE AI TEACHER LESSON
-// PERSONALIZED
+// VIDEO GENERATE ROUTE
 // ==========================================
 
 app.post(
@@ -1279,33 +1087,56 @@ app.post(
 
     try {
 
-      const {
-        topic,
-        explanation,
-      } = req.body;
+      console.log(
+        "VIDEO GENERATE REQUEST"
+      );
 
-      const preferences =
-        getPreferences(
-          req.body
+      const topic =
+        cleanText(
+          req.body.topic
         );
 
-      const subject =
-        (
-          topic ||
-          "Study Topic"
-        ).trim();
+      const fileName =
+        cleanText(
+          req.body.fileName
+        );
 
-      const studyContent =
-        (
-          explanation ||
-          ""
-        )
-          .substring(
-            0,
-            15000
-          );
+      const explanation =
+        cleanText(
+          req.body.explanation
+        );
 
-      if (!studyContent) {
+      let pdfContent =
+        "";
+
+      // Get PDF
+      if (
+        fileName &&
+        uploadedDocuments[
+          fileName
+        ]
+      ) {
+
+        pdfContent =
+          uploadedDocuments[
+            fileName
+          ].text ||
+          "";
+      }
+
+      const sourceContent =
+        explanation ||
+        pdfContent;
+
+      const finalTopic =
+        topic ||
+        "AI Learning Lesson";
+
+      // Validation
+      if (
+        !topic &&
+        !sourceContent
+      ) {
 
         return res
           .status(400)
@@ -1315,67 +1146,67 @@ app.post(
               false,
 
             message:
-              "Please generate study notes first.",
-
+              "Please provide study content first.",
           });
-
       }
 
-      const prompt =
-        `
-You are a friendly AI teacher.
+      // Limit
+      const limitedContent =
+        sourceContent.substring(
+          0,
+          18000
+        );
 
-Create a spoken lesson for a student.
+      // AI prompt
+      const prompt = `
+You are an expert teacher.
+
+Create a spoken educational lesson.
 
 TOPIC:
-${subject}
 
-STUDY NOTES:
-${studyContent}
+${finalTopic}
 
-${getPersonalizationPrompt(preferences)}
+STUDY MATERIAL:
+
+${limitedContent}
 
 Return ONLY valid JSON.
 
-Use exactly this format:
+Do not use markdown.
+
+Use this format:
 
 {
+  "videoScript": "Complete teacher narration",
   "slides": [
     {
-      "title": "Lesson title",
-      "narration": "Natural spoken explanation."
+      "title": "Introduction",
+      "narration": "Teacher explanation"
     }
   ]
 }
 
-RULES:
+Rules:
 
-- Create between 5 and 7 lesson parts.
-- Sound like a real teacher.
-- Start by introducing the topic.
-- Explain important concepts.
-- Include an example.
-- End with a short summary.
-- Do not use markdown.
-- Do not use unnecessary symbols.
+- Create 5 to 8 slides.
+- Use simple English.
+- Explain naturally.
+- Include examples.
+- First slide introduces the topic.
+- Last slide gives a summary.
 `;
 
-      console.log(
-        "Generating personalized AI Teacher lesson..."
-      );
-
+      // Generate AI
       const aiResponse =
         await generateAIResponse(
-          prompt,
-          {
-            responseMimeType:
-              "application/json",
-          }
+          prompt
         );
 
       let parsedData =
         null;
 
+      // Parse JSON
       try {
 
         parsedData =
@@ -1388,59 +1219,70 @@ RULES:
       } catch (error) {
 
         console.log(
-          "Lesson JSON parsing failed. Using fallback slides."
+          "JSON parsing failed."
         );
-
       }
+
+      let videoScript =
+        "";
 
       let slides =
         [];
 
+      // If JSON successful
       if (
         parsedData &&
-        Array.isArray(
-          parsedData.slides
-        )
+        typeof parsedData ===
+          "object"
       ) {
 
-        slides =
-          parsedData.slides
-            .filter(
-              (slide) =>
-                slide &&
-                slide.title &&
-                slide.narration
-            )
-            .slice(
-              0,
-              8
-            )
-            .map(
-              (slide) => ({
+        videoScript =
+          parsedData.videoScript ||
+          "";
 
-                title:
-                  String(
-                    slide.title
-                  )
-                    .replace(
-                      /[#*`]/g,
-                      ""
-                    )
-                    .trim(),
+        if (
+          Array.isArray(
+            parsedData.slides
+          )
+        ) {
 
-                narration:
-                  String(
-                    slide.narration
-                  )
-                    .replace(
-                      /[#*`]/g,
-                      ""
-                    )
-                    .trim(),
+          slides =
+            parsedData.slides
+              .filter(
+                (slide) =>
+                  slide &&
+                  slide.title &&
+                  slide.narration
+              )
+              .slice(
+                0,
+                8
+              )
+              .map(
+                (slide) => ({
 
-              })
-            );
+                  title:
+                    String(
+                      slide.title
+                    ),
 
+                  narration:
+                    String(
+                      slide.narration
+                    ),
+                })
+              );
+        }
+      }
+
+      // Fallback
+      if (
+        !videoScript
+      ) {
+
+        videoScript =
+          sourceContent ||
+          aiResponse;
       }
 
       if (
@@ -1449,12 +1291,12 @@ RULES:
 
         slides =
           createFallbackSlides(
-            studyContent,
-            subject
+            videoScript,
+            finalTopic
           );
-
       }
 
+      // Check video
       const videoPath =
         path.join(
           assetsDir,
@@ -1466,26 +1308,29 @@ RULES:
           videoPath
         );
 
+      // Response
       return res.json({
 
         success:
           true,
 
         message:
-          "Personalized AI Teacher lesson generated successfully.",
+          "AI teacher lesson generated successfully.",
 
-        slides,
+        videoScript:
+          videoScript,
 
-        preferences,
+        slides:
+          slides,
 
         videoAvailable:
           videoExists,
 
         videoUrl:
           videoExists
-            ? `http://localhost:${PORT}/assets/teacher-classroom.mp4`
+            ? getBaseUrl(req) +
+              "/assets/teacher-classroom.mp4"
             : "",
-
       });
 
     } catch (error) {
@@ -1504,199 +1349,62 @@ RULES:
 
           message:
             error.message ||
-            "AI teacher lesson generation failed.",
-
+            "Video generation failed.",
         });
-
     }
-
   }
 );
 
 // ==========================================
-// GENERATE MCQ QUIZ
-// PERSONALIZED
+// TEACHER VIDEO
 // ==========================================
 
-app.post(
-  "/api/study/mcq",
+app.get(
+  "/api/teacher-video",
 
-  async (
+  (
     req,
     res
   ) => {
 
     try {
 
-      const {
-        topic,
-        explanation,
-      } = req.body;
-
-      const preferences =
-        getPreferences(
-          req.body
+      const videoPath =
+        path.join(
+          assetsDir,
+          "teacher-classroom.mp4"
         );
 
-      const subject =
-        topic ||
-        "Study Topic";
-
-      const content =
-        (
-          explanation ||
-          ""
-        )
-          .substring(
-            0,
-            12000
-          );
-
-      const prompt =
-        `
-Create an educational multiple choice quiz.
-
-TOPIC:
-${subject}
-
-STUDY NOTES:
-${content}
-
-${getPersonalizationPrompt(preferences)}
-
-Return ONLY valid JSON.
-
-Use exactly this format:
-
-{
-  "questions": [
-    {
-      "question": "Question here",
-      "options": [
-        "Option A",
-        "Option B",
-        "Option C",
-        "Option D"
-      ],
-      "correctAnswer": 0,
-      "explanation": "Short explanation"
-    }
-  ]
-}
-
-RULES:
-
-- Generate exactly 10 questions.
-- Every question must contain exactly 4 options.
-- correctAnswer must be 0, 1, 2, or 3.
-- Questions must be related to the study notes.
-- Match question difficulty to the student level.
-- Use the student's preferred language.
-`;
-
-      console.log(
-        "Generating personalized MCQ quiz..."
-      );
-
-      const aiResponse =
-        await generateAIResponse(
-          prompt,
-          {
-            responseMimeType:
-              "application/json",
-          }
-        );
-
-      let quizData;
-
-      try {
-
-        quizData =
-          JSON.parse(
-            cleanJsonText(
-              aiResponse
-            )
-          );
-
-      } catch (error) {
-
-        console.error(
-          "Quiz JSON Error:",
-          aiResponse
-        );
-
-        throw new Error(
-          "AI returned invalid quiz data. Please try again."
-        );
-
-      }
-
+      // Check
       if (
-        !quizData.questions ||
-        !Array.isArray(
-          quizData.questions
+        !fs.existsSync(
+          videoPath
         )
       ) {
 
-        throw new Error(
-          "Invalid quiz format."
-        );
+        return res
+          .status(404)
+          .json({
 
+            success:
+              false,
+
+            message:
+              "teacher-classroom.mp4 was not found.",
+          });
       }
-
-      const questions =
-        quizData.questions
-          .slice(
-            0,
-            10
-          )
-          .map(
-            (question) => ({
-
-              question:
-                question.question ||
-                "Question unavailable",
-
-              options:
-                Array.isArray(
-                  question.options
-                )
-                  ? question.options
-                      .slice(
-                        0,
-                        4
-                      )
-                  : [],
-
-              correctAnswer:
-                Number(
-                  question.correctAnswer
-                ) || 0,
-
-              explanation:
-                question.explanation ||
-                "",
-
-            })
-          );
 
       return res.json({
 
         success:
           true,
 
-        questions,
-
-        preferences,
-
+        videoUrl:
+          getBaseUrl(req) +
+          "/assets/teacher-classroom.mp4",
       });
 
     } catch (error) {
-
-      console.error(
-        "MCQ Error:",
-        error
-      );
 
       return res
         .status(500)
@@ -1706,59 +1414,38 @@ RULES:
             false,
 
           message:
-            error.message ||
-            "Failed to generate quiz.",
-
+            error.message,
         });
-
     }
-
   }
 );
 
 // ==========================================
-// DOWNLOAD VIDEO
+// 404 HANDLER
 // ==========================================
 
-app.get(
-  "/api/download/video",
-
+app.use(
   (
     req,
     res
   ) => {
 
-    const videoPath =
-      path.join(
-        assetsDir,
-        "teacher-classroom.mp4"
-      );
+    return res
+      .status(404)
+      .json({
 
-    if (
-      !fs.existsSync(
-        videoPath
-      )
-    ) {
+        success:
+          false,
 
-      return res
-        .status(404)
-        .json({
+        message:
+          "API route not found.",
 
-          success:
-            false,
+        method:
+          req.method,
 
-          message:
-            "Video file not found.",
-
-        });
-
-    }
-
-    return res.download(
-      videoPath,
-      "AI-Teacher-Video.mp4"
-    );
-
+        path:
+          req.originalUrl,
+      });
   }
 );
 
@@ -1779,6 +1466,7 @@ app.use(
       error
     );
 
+    // Multer error
     if (
       error instanceof
       multer.MulterError
@@ -1793,9 +1481,7 @@ app.use(
 
           message:
             error.message,
-
         });
-
     }
 
     return res
@@ -1808,77 +1494,63 @@ app.use(
         message:
           error.message ||
           "Internal server error.",
-
       });
-
   }
 );
 
 // ==========================================
-// START SERVER
+// START LOCAL SERVER
 // ==========================================
 
-app.listen(
-  PORT,
-  () => {
+if (
+  require.main === module
+) {
 
-    const videoPath =
-      path.join(
-        assetsDir,
-        "teacher-classroom.mp4"
+  app.listen(
+    PORT,
+    () => {
+
+      console.log(
+        "================================="
       );
 
-    console.log("");
+      console.log(
+        `Server running on port ${PORT}`
+      );
 
-    console.log(
-      "=========================================="
-    );
+      console.log(
+        `Backend: http://localhost:${PORT}`
+      );
 
-    console.log(
-      "AI TEACHER BACKEND STARTED"
-    );
+      console.log(
+        `Health Check: http://localhost:${PORT}/api/health`
+      );
 
-    console.log(
-      "=========================================="
-    );
+      console.log(
+        `Study Generate: http://localhost:${PORT}/api/study/generate`
+      );
 
-    console.log(
-      `Server: http://localhost:${PORT}`
-    );
+      console.log(
+        `Gemini AI: ${
+          genAI
+            ? "READY"
+            : "NOT CONFIGURED"
+        }`
+      );
 
-    console.log(
-      `Health: http://localhost:${PORT}/api/health`
-    );
+      console.log(
+        `Gemini Model: ${GEMINI_MODEL}`
+      );
 
-    console.log(
-      `Video: http://localhost:${PORT}/assets/teacher-classroom.mp4`
-    );
+      console.log(
+        "================================="
+      );
+    }
+  );
+}
 
-    console.log(
-      `Video Exists: ${
-        fs.existsSync(
-          videoPath
-        )
-      }`
-    );
+// ==========================================
+// EXPORT
+// ==========================================
 
-    console.log(
-      `Gemini AI: ${
-        ai
-          ? "READY"
-          : "NOT CONFIGURED"
-      }`
-    );
-
-    console.log(
-      `Gemini Model: ${GEMINI_MODEL}`
-    );
-
-    console.log(
-      "=========================================="
-    );
-
-    console.log("");
-
-  }
-);
+module.exports = app;
