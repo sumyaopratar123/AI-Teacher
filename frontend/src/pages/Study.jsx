@@ -8,8 +8,8 @@ import Navbar from "../components/Navbar";
 
 import "./Study.css";
 
-const API_URL = "https://ai-teacher-backend-gjdj.onrender.com";
-
+const API_URL =
+  "http://localhost:5000/api";
 
 const STORAGE_KEY =
   "ai_teacher_study_session";
@@ -22,10 +22,6 @@ function Study() {
 
   const [topic, setTopic] =
     useState("");
-
-  // ==========================================
-  // PERSONALIZATION
-  // ==========================================
 
   const [level, setLevel] =
     useState("Beginner");
@@ -121,70 +117,6 @@ function Study() {
     useRef(false);
 
   // ==========================================
-  // LOAD PROFILE PERSONALIZATION
-  // ==========================================
-
-  useEffect(() => {
-
-    try {
-
-      const userEmail =
-        localStorage.getItem("userEmail") ||
-        localStorage.getItem("email") ||
-        localStorage.getItem("user_email") ||
-        "";
-
-      const possibleKeys = [
-        userEmail
-          ? `profile_${userEmail}`
-          : null,
-        "profile",
-        "userProfile",
-        "user_profile",
-      ].filter(Boolean);
-
-      for (const key of possibleKeys) {
-
-        const savedProfile =
-          localStorage.getItem(key);
-
-        if (!savedProfile) {
-          continue;
-        }
-
-        const profile =
-          JSON.parse(savedProfile);
-
-        if (profile.language) {
-          setLanguage(profile.language);
-        }
-
-        if (profile.level) {
-          setLevel(profile.level);
-        }
-
-        if (profile.learningTime) {
-          setLearningTime(
-            String(profile.learningTime)
-          );
-        }
-
-        break;
-
-      }
-
-    } catch (error) {
-
-      console.error(
-        "Could not load profile preferences:",
-        error
-      );
-
-    }
-
-  }, []);
-
-  // ==========================================
   // LOAD SAVED STUDY SESSION
   // ==========================================
 
@@ -208,19 +140,9 @@ function Study() {
         setTopic(data.topic);
       }
 
-      if (data.level) {
-        setLevel(data.level);
-      }
-
-      if (data.language) {
-        setLanguage(data.language);
-      }
-
-      if (data.learningTime) {
-        setLearningTime(
-          String(data.learningTime)
-        );
-      }
+      if (data.level) setLevel(data.level);
+      if (data.language) setLanguage(data.language);
+      if (data.learningTime) setLearningTime(String(data.learningTime));
 
       if (data.explanation) {
         setExplanation(
@@ -657,21 +579,6 @@ function Study() {
             topic.trim()
           );
 
-          formData.append(
-            "level",
-            level
-          );
-
-          formData.append(
-            "language",
-            language
-          );
-
-          formData.append(
-            "learningTime",
-            learningTime
-          );
-
           const uploadResponse =
             await fetch(
               `${API_URL}/study/upload`,
@@ -714,148 +621,124 @@ function Study() {
         }
 
         // ======================================
-        // STEP 2: GENERATE COMPLETE STUDY SESSION
-        // ONE AI REQUEST
+        // STEP 2: GENERATE PERSONALIZED NOTES
         // ======================================
 
-        const response =
+        const preferences = {
+          level,
+          language,
+          learningTime,
+        };
+
+        const explainResponse =
           await fetch(
-            `${API_URL}/study/generate`,
+            `${API_URL}/study/explain`,
             {
-
-              method:
-                "POST",
-
+              method: "POST",
               headers: {
-
-                "Content-Type":
-                  "application/json",
-
+                "Content-Type": "application/json",
               },
-
-              body:
-                JSON.stringify({
-
-                  topic:
-                    topic.trim(),
-
-                  level,
-
-                  language,
-
-                  learningTime,
-
-                  fileName:
-
-                    currentFile?.fileName ||
-
-                    currentFile?.filename ||
-
-                    "",
-
-                }),
-
+              body: JSON.stringify({
+                topic: topic.trim(),
+                fileName:
+                  currentFile?.fileName ||
+                  currentFile?.filename ||
+                  "",
+                ...preferences,
+              }),
             }
           );
 
-        const data =
-          await parseResponse(
-            response
-          );
+        const explainData =
+          await parseResponse(explainResponse);
 
-        if (
-          !response.ok ||
-          !data.success
-        ) {
-
+        if (!explainResponse.ok || !explainData.success) {
           throw new Error(
-
-            data.message ||
-
-            "Study generation failed."
-
+            explainData.message ||
+            "Notes generation failed."
           );
+        }
 
+        const generatedExplanation =
+          explainData.explanation || "";
+
+        setExplanation(generatedExplanation);
+
+        if (!topic.trim() && explainData.subject) {
+          setTopic(explainData.subject);
         }
 
         // ======================================
-        // NOTES
+        // STEP 3: GENERATE TEACHER LESSON
         // ======================================
 
-        setExplanation(
+        const lessonResponse =
+          await fetch(
+            `${API_URL}/video/generate`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                topic:
+                  topic.trim() ||
+                  explainData.subject ||
+                  "Study Topic",
+                explanation: generatedExplanation,
+                ...preferences,
+              }),
+            }
+          );
 
-          data.explanation ||
+        const lessonData =
+          await parseResponse(lessonResponse);
 
-          ""
+        if (
+          lessonResponse.ok &&
+          lessonData.success &&
+          Array.isArray(lessonData.slides)
+        ) {
+          setSlides(lessonData.slides);
+        }
 
+        // ======================================
+        // STEP 4: GENERATE MCQ QUIZ
+        // ======================================
+
+        const quizResponse =
+          await fetch(
+            `${API_URL}/study/mcq`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                topic:
+                  topic.trim() ||
+                  explainData.subject ||
+                  "Study Topic",
+                explanation: generatedExplanation,
+                ...preferences,
+              }),
+            }
+          );
+
+        const quizData =
+          await parseResponse(quizResponse);
+
+        if (
+          quizResponse.ok &&
+          quizData.success &&
+          Array.isArray(quizData.questions)
+        ) {
+          setQuestions(quizData.questions);
+        }
+
+        setSuccessMessage(
+          "AI Notes, Teacher Lesson and MCQ Quiz generated successfully! 🎉"
         );
-
-        // ======================================
-        // SLIDES
-        // ======================================
-
-        if (
-          Array.isArray(
-            data.slides
-          )
-        ) {
-
-          setSlides(
-            data.slides
-          );
-
-        }
-
-        // ======================================
-        // MCQ QUESTIONS
-        // ======================================
-
-        if (
-          Array.isArray(
-            data.questions
-          )
-        ) {
-
-          setQuestions(
-            data.questions
-          );
-
-        }
-
-        // ======================================
-        // SET GENERATED SUBJECT
-        // ======================================
-
-        if (
-          !topic.trim() &&
-          data.subject
-        ) {
-
-          setTopic(
-            data.subject
-          );
-
-        }
-
-        if (
-          data.fallback
-        ) {
-
-          setSuccessMessage(
-
-            "Study session generated successfully using backup content."
-
-          );
-
-        } else {
-
-          setSuccessMessage(
-
-            "AI Notes, Teacher Lesson and MCQ Quiz generated successfully! 🎉"
-
-          );
-
-        }
 
       } catch (error) {
 
@@ -1138,28 +1021,25 @@ function Study() {
           .speechSynthesis
           .getVoices();
 
-      const preferredVoice =
+      const languageCode =
+        language === "Marathi"
+          ? "mr"
+          : language === "Hindi"
+            ? "hi"
+            : "en";
 
+      const preferredVoice =
         voices.find(
           (voice) =>
-
             voice.lang
               .toLowerCase()
-              .startsWith("en") &&
-
-            voice.name
-              .toLowerCase()
-              .includes("zira")
-
+              .startsWith(languageCode)
         ) ||
-
         voices.find(
           (voice) =>
-
             voice.lang
               .toLowerCase()
               .startsWith("en")
-
         );
 
       if (
@@ -1669,6 +1549,12 @@ function Study() {
       stopLesson();
 
       setTopic("");
+
+      setLevel("Beginner");
+
+      setLanguage("English");
+
+      setLearningTime("20");
 
       setSelectedFile(
         null
@@ -2296,99 +2182,42 @@ function Study() {
           />
 
 
-          {/* PERSONALIZATION PANEL */}
+          <div className="personalization-panel">
 
-          <div
-            className="personalization-panel"
-          >
+            <h3>🎯 Personalize Your Learning</h3>
 
-            <h3>
-              🎯 Personalize Your Learning
-            </h3>
+            <div className="personalization-grid">
 
-            <div
-              className="personalization-grid"
-            >
-
-              <div className="personalization-field">
-
-                <label>
-                  Level
-                </label>
-
-                <select
-                  value={level}
-                  onChange={
-                    (event) =>
-                      setLevel(event.target.value)
-                  }
-                >
-                  <option>Beginner</option>
-                  <option>Intermediate</option>
-                  <option>Advanced</option>
+              <div className="personalization-option">
+                <label>Learning Level</label>
+                <select value={level} onChange={(event) => setLevel(event.target.value)}>
+                  <option value="Beginner">Beginner</option>
+                  <option value="Intermediate">Intermediate</option>
+                  <option value="Advanced">Advanced</option>
                 </select>
-
               </div>
 
-
-              <div className="personalization-field">
-
-                <label>
-                  Language
-                </label>
-
-                <select
-                  value={language}
-                  onChange={
-                    (event) =>
-                      setLanguage(event.target.value)
-                  }
-                >
-                  <option>English</option>
-                  <option>Hindi</option>
-                  <option>Marathi</option>
-                  <option>Hinglish</option>
+              <div className="personalization-option">
+                <label>Preferred Language</label>
+                <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+                  <option value="English">English</option>
+                  <option value="Hindi">Hindi</option>
+                  <option value="Marathi">Marathi</option>
                 </select>
-
               </div>
 
-
-              <div className="personalization-field">
-
-                <label>
-                  Learning Time
-                </label>
-
-                <select
-                  value={learningTime}
-                  onChange={
-                    (event) =>
-                      setLearningTime(event.target.value)
-                  }
-                >
-                  <option value="10">
-                    10 Minutes
-                  </option>
-                  <option value="20">
-                    20 Minutes
-                  </option>
-                  <option value="30">
-                    30 Minutes
-                  </option>
+              <div className="personalization-option">
+                <label>Learning Time</label>
+                <select value={learningTime} onChange={(event) => setLearningTime(event.target.value)}>
+                  <option value="10">10 Minutes</option>
+                  <option value="20">20 Minutes</option>
+                  <option value="30">30 Minutes</option>
                 </select>
-
               </div>
 
             </div>
 
-            <p className="personalization-note">
-              AI will create the lesson according to
-              your level, language and available
-              learning time.
-            </p>
-
           </div>
-
 
           <p className="or-text">
             OR
@@ -2507,7 +2336,7 @@ function Study() {
             {
               loading
 
-                ? "Generating Complete Study Session..."
+                ? "Generating Personalized Study Session..."
 
                 : "Start Study 🚀"
             }
