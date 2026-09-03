@@ -8,7 +8,7 @@ import Navbar from "../components/Navbar";
 
 import "./Study.css";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "https://ai-teacher-backend-dgij.onrender.com/api";
 
 const STORAGE_KEY =
   "ai_teacher_study_session";
