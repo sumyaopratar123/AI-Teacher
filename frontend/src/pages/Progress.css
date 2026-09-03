@@ -1,0 +1,552 @@
+.progress-page {
+  min-height: 100vh;
+  padding: 35px;
+  background: #f6f8fc;
+  color: #1e293b;
+}
+
+/* ================= HEADER ================= */
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.progress-tag {
+  margin: 0 0 8px;
+  color: #635bce;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.progress-header h1 {
+  margin: 0;
+  font-size: 36px;
+}
+
+.progress-header p:not(.progress-tag) {
+  margin-top: 10px;
+  color: #64748b;
+}
+
+.progress-date {
+  padding: 12px 18px;
+  background: white;
+  border: 1px solid #e8eaf1;
+  border-radius: 12px;
+  color: #475569;
+  font-weight: 600;
+}
+
+/* ================= TOP STATS ================= */
+
+.progress-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.progress-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 22px;
+  background: white;
+  border: 1px solid #e9eaf3;
+  border-radius: 18px;
+  transition: 0.3s;
+}
+
+.progress-stat-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 15px 35px rgba(99, 91, 206, 0.1);
+}
+
+.progress-stat-icon {
+  width: 55px;
+  height: 55px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 16px;
+  font-size: 25px;
+}
+
+.progress-stat-icon.purple {
+  background: #ede9fe;
+}
+
+.progress-stat-icon.orange {
+  background: #ffedd5;
+}
+
+.progress-stat-icon.blue {
+  background: #dbeafe;
+}
+
+.progress-stat-icon.green {
+  background: #dcfce7;
+}
+
+.progress-stat-card p {
+  margin: 0 0 6px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.progress-stat-card h2 {
+  margin: 0 0 5px;
+  font-size: 23px;
+}
+
+.progress-stat-card span {
+  color: #22c55e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ================= MAIN GRID ================= */
+
+.progress-main-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 22px;
+  margin-bottom: 40px;
+}
+
+/* ================= WEEKLY CARD ================= */
+
+.weekly-card {
+  padding: 28px;
+  background: white;
+  border: 1px solid #e9eaf3;
+  border-radius: 22px;
+}
+
+.card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.small-heading {
+  margin: 0 0 8px;
+  color: #635bce;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.card-heading h2 {
+  margin: 0;
+  font-size: 23px;
+}
+
+.activity-label {
+  padding: 8px 12px;
+  background: #dcfce7;
+  color: #16a34a;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ================= CHART ================= */
+
+.chart-area {
+  height: 260px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 30px 10px 10px;
+  margin-top: 20px;
+  border-bottom: 1px solid #eef0f5;
+}
+
+.bar-item {
+  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+}
+
+.bar-wrapper {
+  width: 100%;
+  height: 210px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.bar {
+  width: 65%;
+  min-height: 12px;
+  border-radius: 12px 12px 5px 5px;
+  background: linear-gradient(180deg, #8b5cf6, #635bce);
+  animation: growBar 1s ease;
+  transition: 0.3s;
+}
+
+.bar:hover {
+  filter: brightness(1.1);
+  transform: scaleY(1.03);
+}
+
+@keyframes growBar {
+  from {
+    height: 0;
+  }
+}
+
+.bar-item span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* ================= CHART FOOTER ================= */
+
+.chart-footer {
+  display: flex;
+  gap: 30px;
+  padding-top: 20px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* ================= AI INSIGHT ================= */
+
+.progress-ai-card {
+  position: relative;
+  padding: 30px;
+  overflow: hidden;
+  border-radius: 22px;
+  color: white;
+  background: linear-gradient(
+    135deg,
+    #635bce,
+    #7c3aed,
+    #8b5cf6
+  );
+  box-shadow: 0 15px 35px rgba(99, 91, 206, 0.2);
+}
+
+.progress-ai-card::before {
+  content: "";
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  right: -100px;
+  top: -100px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.progress-ai-card > * {
+  position: relative;
+}
+
+.ai-orb {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 25px;
+  border-radius: 20px;
+  font-size: 30px;
+  background: rgba(255, 255, 255, 0.15);
+  animation: orbFloat 3s infinite ease-in-out;
+}
+
+@keyframes orbFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.progress-ai-card > p {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  opacity: 0.8;
+}
+
+.progress-ai-card h2 {
+  font-size: 27px;
+  line-height: 1.3;
+}
+
+.ai-insight-box {
+  display: flex;
+  gap: 12px;
+  padding: 15px;
+  margin: 22px 0;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ai-insight-box span {
+  font-size: 25px;
+}
+
+.ai-insight-box p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.progress-ai-card button {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 13px;
+  background: white;
+  color: #635bce;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.progress-ai-card button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* ================= SKILLS ================= */
+
+.skills-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  margin-bottom: 22px;
+}
+
+.skills-section-header h2 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.skills-section-header > span {
+  padding: 9px 14px;
+  background: #ede9fe;
+  border-radius: 20px;
+  color: #635bce;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.skills-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 45px;
+}
+
+.skill-card {
+  padding: 22px;
+  background: white;
+  border: 1px solid #e9eaf3;
+  border-radius: 20px;
+  transition: 0.3s;
+}
+
+.skill-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 15px 35px rgba(99, 91, 206, 0.08);
+}
+
+.skill-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.skill-icon {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #f1efff;
+  border-radius: 15px;
+  font-size: 25px;
+}
+
+.skill-top strong {
+  color: #635bce;
+  font-size: 18px;
+}
+
+.skill-card h3 {
+  margin: 20px 0 15px;
+  font-size: 16px;
+}
+
+.skill-progress-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #e9eaf3;
+}
+
+.skill-progress-fill {
+  height: 100%;
+  border-radius: 20px;
+  background: linear-gradient(90deg, #635bce, #8b5cf6);
+  animation: progressGrow 1.2s ease;
+}
+
+@keyframes progressGrow {
+  from {
+    width: 0 !important;
+  }
+}
+
+.skill-card p {
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+/* ================= ACHIEVEMENTS ================= */
+
+.achievement-section {
+  margin-top: 10px;
+}
+
+.achievement-heading {
+  margin-bottom: 20px;
+}
+
+.achievement-heading h2 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.achievement-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 22px;
+  background: white;
+  border: 1px solid #e9eaf3;
+  border-radius: 18px;
+  transition: 0.3s;
+}
+
+.achievement-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 15px 35px rgba(99, 91, 206, 0.08);
+}
+
+.achievement-icon {
+  width: 55px;
+  height: 55px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: #fff7ed;
+  font-size: 26px;
+}
+
+.achievement-card h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.achievement-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.achievement-card strong {
+  margin-left: auto;
+  color: #635bce;
+  font-size: 15px;
+}
+
+/* ================= RESPONSIVE ================= */
+
+@media (max-width: 1200px) {
+  .progress-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .skills-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .achievement-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 950px) {
+  .progress-main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 650px) {
+  .progress-page {
+    padding: 20px;
+  }
+
+  .progress-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .progress-header h1 {
+    font-size: 29px;
+  }
+
+  .progress-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .skills-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-footer {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .skills-section-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .chart-area {
+    gap: 8px;
+  }
+
+  .bar {
+    width: 75%;
+  }
+}
