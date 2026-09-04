@@ -11,6 +11,7 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const pdfParse = require("pdf-parse");
+
 const {
   GoogleGenerativeAI,
 } = require("@google/generative-ai");
@@ -154,9 +155,8 @@ function getErrorStatus(error) {
 // WITH AUTOMATIC RETRY
 // ==========================================
 
-async function generateAIResponse(
-  prompt
-) {
+async function generateAIResponse(prompt) {
+
   if (!genAI) {
     throw new Error(
       "Gemini API is not configured. Please check GEMINI_API_KEY."
@@ -172,7 +172,9 @@ async function generateAIResponse(
     attempt <= MAX_RETRIES;
     attempt++
   ) {
+
     try {
+
       console.log(
         `Gemini request attempt ${attempt}/${MAX_RETRIES}`
       );
@@ -214,6 +216,7 @@ async function generateAIResponse(
       return text.trim();
 
     } catch (error) {
+
       lastError = error;
 
       const status =
@@ -1447,6 +1450,307 @@ app.get(
             error.message,
         });
     }
+  }
+);
+
+// ==========================================
+// GENERATE MCQ QUIZ
+// ==========================================
+
+app.post(
+  "/api/study/mcq",
+
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const topic =
+        cleanText(
+          req.body.topic
+        ) ||
+        "Study Topic";
+
+      const explanation =
+        cleanText(
+          req.body.explanation
+        );
+
+      const content =
+        explanation.substring(
+          0,
+          12000
+        );
+
+      const prompt = `
+Create an educational multiple choice quiz.
+
+TOPIC:
+
+${topic}
+
+STUDY NOTES:
+
+${content}
+
+Return ONLY valid JSON in this format:
+
+{
+  "questions": [
+    {
+      "question": "Question here",
+      "options": [
+        "Option A",
+        "Option B",
+        "Option C",
+        "Option D"
+      ],
+      "correctAnswer": 0,
+      "explanation": "Short explanation"
+    }
+  ]
+}
+
+Rules:
+
+- Generate exactly 10 questions.
+- Every question must have exactly 4 options.
+- correctAnswer must be 0, 1, 2, or 3.
+- Questions must be based on the topic and notes.
+- Use easy and medium difficulty.
+`;
+
+      const aiResponse =
+        await generateAIResponse(
+          prompt
+        );
+
+      const quizData =
+        JSON.parse(
+          cleanJsonText(
+            aiResponse
+          )
+        );
+
+      if (
+        !quizData ||
+        !Array.isArray(
+          quizData.questions
+        )
+      ) {
+        throw new Error(
+          "Invalid quiz format received from AI."
+        );
+      }
+
+      const questions =
+        quizData.questions
+          .slice(
+            0,
+            10
+          )
+          .map(
+            (item) => ({
+
+              question:
+                String(
+                  item.question ||
+                  "Question unavailable"
+                ),
+
+              options:
+                Array.isArray(
+                  item.options
+                )
+                  ? item.options
+                      .slice(0, 4)
+                      .map(String)
+                  : [],
+
+              correctAnswer:
+                Number.isInteger(
+                  Number(
+                    item.correctAnswer
+                  )
+                )
+                  ? Math.max(
+                      0,
+                      Math.min(
+                        3,
+                        Number(
+                          item.correctAnswer
+                        )
+                      )
+                    )
+                  : 0,
+
+              explanation:
+                String(
+                  item.explanation ||
+                  ""
+                ),
+            })
+          )
+          .filter(
+            (item) =>
+              item.options.length === 4
+          );
+
+      return res.json({
+        success: true,
+        questions,
+      });
+
+    } catch (error) {
+
+      console.error(
+        "MCQ Error:",
+        error
+      );
+
+      return res
+        .status(
+          getErrorStatus(error) ||
+          500
+        )
+        .json({
+          success: false,
+          message:
+            error.message ||
+            "Failed to generate quiz.",
+        });
+    }
+  }
+);
+
+// ==========================================
+// DOWNLOAD NOTES
+// ==========================================
+
+app.post(
+  "/api/download/notes",
+
+  (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const topic =
+        cleanText(
+          req.body.topic
+        ) ||
+        "Study Notes";
+
+      const explanation =
+        cleanText(
+          req.body.explanation
+        );
+
+      const safeTopic =
+        topic
+          .replace(
+            /[^a-zA-Z0-9-_]/g,
+            "-"
+          )
+          .replace(
+            /-+/g,
+            "-"
+          );
+
+      const content =
+        `${topic}
+
+========================================
+
+${explanation}
+`;
+
+      const fileName =
+        `${
+          safeTopic ||
+          "study-notes"
+        }-notes.txt`;
+
+      res.setHeader(
+        "Content-Type",
+        "text/plain; charset=utf-8"
+      );
+
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileName}"`
+      );
+
+      return res.send(
+        content
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Notes Download Error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+          message:
+            error.message ||
+            "Failed to download notes.",
+        });
+    }
+  }
+);
+
+// ==========================================
+// DOWNLOAD TEACHER VIDEO
+// ==========================================
+
+app.get(
+  "/api/download/video",
+
+  (
+    req,
+    res
+  ) => {
+
+    const videoPath =
+      path.join(
+        assetsDir,
+        "teacher-classroom.mp4"
+      );
+
+    if (
+      !fs.existsSync(
+        videoPath
+      )
+    ) {
+
+      return res
+        .status(404)
+        .json({
+
+          success:
+            false,
+
+          message:
+            "Teacher video file was not found.",
+
+          expectedFile:
+            "backend/assets/teacher-classroom.mp4",
+        });
+    }
+
+    return res.download(
+      videoPath,
+      "AI-Teacher-Video.mp4"
+    );
   }
 );
 
