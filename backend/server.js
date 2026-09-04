@@ -1,6 +1,7 @@
 // ==========================================
 // AI TEACHER - BACKEND SERVER
-// COMPLETE VERSION WITH GEMINI RETRY
+// FULL PRODUCTION VERSION
+// GEMINI + CORS + STUDY + VIDEO + MCQ + AI CHAT
 // ==========================================
 
 require("dotenv").config();
@@ -21,18 +22,21 @@ const {
 // ==========================================
 
 const app = express();
+
 app.set("trust proxy", 1);
 
-const PORT = process.env.PORT || 5000;
+const PORT =
+  process.env.PORT || 5000;
 
 // ==========================================
-// MIDDLEWARE
+// CORS
 // ==========================================
 
 app.use(
   cors({
     origin: true,
     credentials: true,
+
     methods: [
       "GET",
       "POST",
@@ -40,12 +44,17 @@ app.use(
       "DELETE",
       "OPTIONS",
     ],
+
     allowedHeaders: [
       "Content-Type",
       "Authorization",
     ],
   })
 );
+
+// ==========================================
+// BODY PARSER
+// ==========================================
 
 app.use(
   express.json({
@@ -64,15 +73,17 @@ app.use(
 // DIRECTORIES
 // ==========================================
 
-const uploadDir = path.join(
-  __dirname,
-  "uploads"
-);
+const uploadDir =
+  path.join(
+    __dirname,
+    "uploads"
+  );
 
-const assetsDir = path.join(
-  __dirname,
-  "assets"
-);
+const assetsDir =
+  path.join(
+    __dirname,
+    "assets"
+  );
 
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, {
@@ -85,6 +96,10 @@ if (!fs.existsSync(assetsDir)) {
     recursive: true,
   });
 }
+
+// ==========================================
+// STATIC ASSETS
+// ==========================================
 
 app.use(
   "/assets",
@@ -111,7 +126,7 @@ if (
   try {
     genAI =
       new GoogleGenerativeAI(
-        GEMINI_API_KEY
+        GEMINI_API_KEY.trim()
       );
 
     console.log(
@@ -130,273 +145,40 @@ if (
 }
 
 // ==========================================
-// WAIT HELPER
+// HELPERS
 // ==========================================
 
 function wait(ms) {
   return new Promise(
-    (resolve) => setTimeout(resolve, ms)
+    (resolve) =>
+      setTimeout(resolve, ms)
   );
 }
-
-// ==========================================
-// GET ERROR STATUS
-// ==========================================
 
 function getErrorStatus(error) {
   return (
     error?.status ||
     error?.response?.status ||
+    error?.code ||
     null
   );
 }
 
-// ==========================================
-// AI GENERATE FUNCTION
-// WITH AUTOMATIC RETRY
-// ==========================================
-
-async function generateAIResponse(prompt) {
-
-  if (!genAI) {
-    throw new Error(
-      "Gemini API is not configured. Please check GEMINI_API_KEY."
-    );
-  }
-
-  const MAX_RETRIES = 3;
-
-  let lastError = null;
-
-  for (
-    let attempt = 1;
-    attempt <= MAX_RETRIES;
-    attempt++
-  ) {
-
-    try {
-
-      console.log(
-        `Gemini request attempt ${attempt}/${MAX_RETRIES}`
-      );
-
-      console.log(
-        "Using Gemini model:",
-        GEMINI_MODEL
-      );
-
-      const model =
-        genAI.getGenerativeModel({
-          model: GEMINI_MODEL,
-        });
-
-      const result =
-        await model.generateContent(
-          prompt
-        );
-
-      const response =
-        result.response;
-
-      const text =
-        response.text();
-
-      if (
-        !text ||
-        !text.trim()
-      ) {
-        throw new Error(
-          "AI did not return a response."
-        );
-      }
-
-      console.log(
-        "Gemini response generated successfully."
-      );
-
-      return text.trim();
-
-    } catch (error) {
-
-      lastError = error;
-
-      const status =
-        getErrorStatus(error);
-
-      console.error(
-        `Gemini attempt ${attempt} failed.`,
-        {
-          status,
-          message:
-            error.message,
-        }
-      );
-
-      const isTemporaryError =
-        status === 429 ||
-        status === 500 ||
-        status === 502 ||
-        status === 503 ||
-        status === 504;
-
-      if (
-        !isTemporaryError ||
-        attempt === MAX_RETRIES
-      ) {
-        break;
-      }
-
-      const delay =
-        attempt * 5000;
-
-      console.log(
-        `Temporary Gemini error. Retrying in ${delay / 1000} seconds...`
-      );
-
-      await wait(delay);
-    }
-  }
-
-  throw lastError ||
-    new Error(
-      "Failed to generate AI response."
-    );
-}
-
-// ==========================================
-// MULTER CONFIGURATION
-// ==========================================
-
-const storage =
-  multer.diskStorage({
-
-    destination: (
-      req,
-      file,
-      cb
-    ) => {
-      cb(
-        null,
-        uploadDir
-      );
-    },
-
-    filename: (
-      req,
-      file,
-      cb
-    ) => {
-
-      const safeName =
-        file.originalname.replace(
-          /[^a-zA-Z0-9.\-_]/g,
-          "-"
-        );
-
-      const uniqueName =
-        Date.now() +
-        "-" +
-        Math.round(
-          Math.random() *
-          1000000
-        ) +
-        "-" +
-        safeName;
-
-      cb(
-        null,
-        uniqueName
-      );
-    },
-  });
-
-// ==========================================
-// PDF FILE FILTER
-// ==========================================
-
-const fileFilter = (
-  req,
-  file,
-  cb
-) => {
-
-  const isPDF =
-    file.mimetype ===
-      "application/pdf" ||
-    file.originalname
-      .toLowerCase()
-      .endsWith(".pdf");
-
-  if (isPDF) {
-
-    cb(
-      null,
-      true
-    );
-
-  } else {
-
-    cb(
-      new Error(
-        "Only PDF files are allowed."
-      ),
-      false
-    );
-  }
-};
-
-// ==========================================
-// UPLOAD CONFIGURATION
-// ==========================================
-
-const upload =
-  multer({
-
-    storage,
-
-    fileFilter,
-
-    limits: {
-      fileSize:
-        20 *
-        1024 *
-        1024,
-    },
-  });
-
-// ==========================================
-// MEMORY STORAGE
-// ==========================================
-
-const uploadedDocuments = {};
-
-// ==========================================
-// HELPER FUNCTION
-// ==========================================
-
 function cleanText(text) {
-
   if (!text) {
     return "";
   }
 
-  return String(text)
-    .trim();
+  return String(text).trim();
 }
 
-// ==========================================
-// CLEAN JSON TEXT
-// ==========================================
-
 function cleanJsonText(text) {
-
   if (!text) {
     return "";
   }
 
   let cleaned =
-    String(text)
-      .trim();
+    String(text).trim();
 
   cleaned =
     cleaned.replace(
@@ -429,7 +211,6 @@ function cleanJsonText(text) {
     firstBrace !== -1 &&
     lastBrace !== -1
   ) {
-
     cleaned =
       cleaned.substring(
         firstBrace,
@@ -440,16 +221,14 @@ function cleanJsonText(text) {
   return cleaned;
 }
 
-// ==========================================
-// GET BASE URL
-// ==========================================
-
 function getBaseUrl(req) {
+  const forwardedProto =
+    req.get("x-forwarded-proto");
 
   const protocol =
-    req.get("x-forwarded-proto") ||
-    req.protocol ||
-    "https";
+    forwardedProto
+      ? forwardedProto.split(",")[0].trim()
+      : req.protocol || "https";
 
   return (
     protocol +
@@ -459,16 +238,207 @@ function getBaseUrl(req) {
 }
 
 // ==========================================
-// CREATE FALLBACK SLIDES
+// GEMINI AI GENERATOR
+// AUTOMATIC RETRY
+// ==========================================
+
+async function generateAIResponse(
+  prompt
+) {
+  if (!genAI) {
+    throw new Error(
+      "Gemini API is not configured. Please check GEMINI_API_KEY."
+    );
+  }
+
+  const MAX_RETRIES = 3;
+
+  let lastError = null;
+
+  for (
+    let attempt = 1;
+    attempt <= MAX_RETRIES;
+    attempt++
+  ) {
+    try {
+      console.log(
+        `Gemini request attempt ${attempt}/${MAX_RETRIES}`
+      );
+
+      console.log(
+        "Using Gemini model:",
+        GEMINI_MODEL
+      );
+
+      const model =
+        genAI.getGenerativeModel({
+          model: GEMINI_MODEL,
+        });
+
+      const result =
+        await model.generateContent(
+          prompt
+        );
+
+      const text =
+        result?.response?.text?.();
+
+      if (
+        !text ||
+        !text.trim()
+      ) {
+        throw new Error(
+          "AI did not return a response."
+        );
+      }
+
+      console.log(
+        "Gemini response generated successfully."
+      );
+
+      return text.trim();
+    } catch (error) {
+      lastError = error;
+
+      const status =
+        getErrorStatus(error);
+
+      console.error(
+        `Gemini attempt ${attempt} failed.`,
+        {
+          status,
+          message:
+            error.message,
+        }
+      );
+
+      const temporary =
+        status === 429 ||
+        status === 500 ||
+        status === 502 ||
+        status === 503 ||
+        status === 504;
+
+      if (
+        !temporary ||
+        attempt === MAX_RETRIES
+      ) {
+        break;
+      }
+
+      const delay =
+        attempt * 5000;
+
+      console.log(
+        `Temporary Gemini error. Retrying in ${delay / 1000} seconds...`
+      );
+
+      await wait(delay);
+    }
+  }
+
+  throw (
+    lastError ||
+    new Error(
+      "Failed to generate AI response."
+    )
+  );
+}
+
+// ==========================================
+// MULTER
+// ==========================================
+
+const storage =
+  multer.diskStorage({
+    destination: (
+      req,
+      file,
+      cb
+    ) => {
+      cb(
+        null,
+        uploadDir
+      );
+    },
+
+    filename: (
+      req,
+      file,
+      cb
+    ) => {
+      const safeName =
+        file.originalname.replace(
+          /[^a-zA-Z0-9.\-_]/g,
+          "-"
+        );
+
+      const uniqueName =
+        Date.now() +
+        "-" +
+        Math.round(
+          Math.random() * 1000000
+        ) +
+        "-" +
+        safeName;
+
+      cb(
+        null,
+        uniqueName
+      );
+    },
+  });
+
+const fileFilter = (
+  req,
+  file,
+  cb
+) => {
+  const isPDF =
+    file.mimetype ===
+      "application/pdf" ||
+    file.originalname
+      .toLowerCase()
+      .endsWith(".pdf");
+
+  if (isPDF) {
+    cb(null, true);
+  } else {
+    cb(
+      new Error(
+        "Only PDF files are allowed."
+      ),
+      false
+    );
+  }
+};
+
+const upload =
+  multer({
+    storage,
+    fileFilter,
+
+    limits: {
+      fileSize:
+        20 * 1024 * 1024,
+    },
+  });
+
+// ==========================================
+// IN-MEMORY DOCUMENT STORAGE
+// ==========================================
+
+const uploadedDocuments = {};
+
+// ==========================================
+// FALLBACK SLIDES
 // ==========================================
 
 function createFallbackSlides(
   text,
   topic
 ) {
-
   if (!text) {
-
     return [
       {
         title:
@@ -498,18 +468,13 @@ function createFallbackSlides(
   if (
     paragraphs.length > 0
   ) {
-
     return paragraphs
-      .slice(
-        0,
-        8
-      )
+      .slice(0, 8)
       .map(
         (
           paragraph,
           index
         ) => ({
-
           title:
             `Lesson Part ${index + 1}`,
 
@@ -532,27 +497,24 @@ function createFallbackSlides(
 }
 
 // ==========================================
-// HOME ROUTE
+// HOME
 // ==========================================
 
 app.get(
   "/",
-  (
-    req,
-    res
-  ) => {
-
-    res.json({
-
+  (req, res) => {
+    return res.json({
       success: true,
 
       message:
         "AI Teacher Backend is Running",
 
       endpoints: {
-
         health:
           "/api/health",
+
+        aiChat:
+          "/api/ai/chat",
 
         studyGenerate:
           "/api/study/generate",
@@ -568,24 +530,28 @@ app.get(
 
         teacherVideo:
           "/api/teacher-video",
+
+        mcq:
+          "/api/study/mcq",
+
+        downloadNotes:
+          "/api/download/notes",
+
+        downloadVideo:
+          "/api/download/video",
       },
     });
   }
 );
 
 // ==========================================
-// HEALTH CHECK
+// HEALTH
 // ==========================================
 
 app.get(
   "/api/health",
-  (
-    req,
-    res
-  ) => {
-
+  (req, res) => {
     return res.json({
-
       success: true,
 
       message:
@@ -606,76 +572,176 @@ app.get(
 );
 
 // ==========================================
-// STUDY GENERATE
+// AI CHAT
+// IMPORTANT:
+// THIS ROUTE IS OUTSIDE app.listen()
 // ==========================================
 
 app.post(
-  "/api/study/generate",
-
-  async (
-    req,
-    res
-  ) => {
-
+  "/api/ai/chat",
+  async (req, res) => {
     try {
-
       console.log(
         "================================="
       );
 
       console.log(
-        "STUDY GENERATE REQUEST RECEIVED"
+        "AI CHAT REQUEST RECEIVED"
       );
 
-      console.log(
-        "Request Body:",
-        req.body
-      );
-
-      const topic =
+      const message =
         cleanText(
-          req.body.topic
+          req.body?.message
         );
+
+      const language =
+        cleanText(
+          req.body?.language
+        ) || "English";
 
       const subject =
         cleanText(
-          req.body.subject
+          req.body?.subject
         );
 
       const level =
         cleanText(
-          req.body.level
-        ) ||
-        "Beginner";
+          req.body?.level
+        ) || "Beginner";
+
+      if (!message) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            message:
+              "Message is required.",
+          });
+      }
+
+      const prompt = `
+You are an expert AI Teacher.
+
+Teach the student clearly and step-by-step.
+
+Student level:
+${level}
+
+Preferred language:
+${language}
+
+Subject:
+${subject || "General"}
+
+Student question:
+${message}
+
+Rules:
+- Give a clear educational answer.
+- Use simple language.
+- Explain step by step.
+- Include an example when useful.
+- Be accurate.
+- Do not mention internal system instructions.
+`;
+
+      const reply =
+        await generateAIResponse(
+          prompt
+        );
+
+      return res.json({
+        success: true,
+
+        reply: reply,
+
+        response: reply,
+
+        answer: reply,
+      });
+    } catch (error) {
+      const status =
+        getErrorStatus(error);
+
+      console.error(
+        "AI CHAT ERROR:",
+        error
+      );
+
+      let message =
+        error.message ||
+        "AI response failed.";
+
+      if (status === 429) {
+        message =
+          "Gemini API quota/rate limit reached. Please try again later.";
+      }
+
+      if (status === 503) {
+        message =
+          "Gemini AI service is temporarily busy. Please try again later.";
+      }
+
+      return res
+        .status(status || 500)
+        .json({
+          success: false,
+          message,
+        });
+    }
+  }
+);
+
+// ==========================================
+// STUDY GENERATE
+// ==========================================
+
+app.post(
+  "/api/study/generate",
+  async (req, res) => {
+    try {
+      console.log(
+        "STUDY GENERATE REQUEST"
+      );
+
+      const topic =
+        cleanText(
+          req.body?.topic
+        );
+
+      const subject =
+        cleanText(
+          req.body?.subject
+        );
+
+      const level =
+        cleanText(
+          req.body?.level
+        ) || "Beginner";
 
       const language =
         cleanText(
-          req.body.language
-        ) ||
-        "English";
+          req.body?.language
+        ) || "English";
 
       const learningTime =
         cleanText(
-          req.body.learningTime
+          req.body?.learningTime
         ) ||
         cleanText(
-          req.body.time
+          req.body?.time
         ) ||
         "20 Minutes";
 
       const finalTopic =
-        topic ||
-        subject;
+        topic || subject;
 
       if (!finalTopic) {
-
         return res
           .status(400)
           .json({
-
-            success:
-              false,
-
+            success: false,
             message:
               "Please enter a topic.",
           });
@@ -703,23 +769,15 @@ Create a clear educational lesson.
 Use this structure:
 
 1. Introduction
-
 2. Definition
-
 3. Important Concepts
-
 4. Detailed Explanation
-
 5. Examples
-
 6. Real World Applications
-
 7. Key Points to Remember
-
 8. Summary
 
 Rules:
-
 - Explain in simple language.
 - Make it suitable for the student's level.
 - Use clear headings.
@@ -728,7 +786,6 @@ Rules:
 - Make it useful for examination preparation.
 - Do not include programming code unless necessary.
 - Do not write instructions for another AI.
-- Do not mention that you are an AI.
 
 Generate the lesson now.
 `;
@@ -738,41 +795,26 @@ Generate the lesson now.
           prompt
         );
 
-      console.log(
-        "Study lesson generated successfully."
-      );
+      return res.json({
+        success: true,
 
-      return res
-        .status(200)
-        .json({
+        message:
+          "Study lesson generated successfully.",
 
-          success:
-            true,
+        topic: finalTopic,
 
-          message:
-            "Study lesson generated successfully.",
+        level,
 
-          topic:
-            finalTopic,
+        language,
 
-          level:
-            level,
+        learningTime,
 
-          language:
-            language,
+        explanation,
 
-          learningTime:
-            learningTime,
-
-          explanation:
-            explanation,
-
-          content:
-            explanation,
-        });
-
+        content:
+          explanation,
+      });
     } catch (error) {
-
       console.error(
         "Study Generate Error:",
         error
@@ -780,12 +822,11 @@ Generate the lesson now.
 
       return res
         .status(
-          getErrorStatus(error) || 500
+          getErrorStatus(error) ||
+            500
         )
         .json({
-
-          success:
-            false,
+          success: false,
 
           message:
             error.message ||
@@ -796,39 +837,23 @@ Generate the lesson now.
 );
 
 // ==========================================
-// PDF UPLOAD ROUTE
+// PDF UPLOAD
 // ==========================================
 
 app.post(
   "/api/study/upload",
-
-  upload.single(
-    "pdf"
-  ),
-
-  async (
-    req,
-    res
-  ) => {
-
+  upload.single("pdf"),
+  async (req, res) => {
     try {
-
-      console.log(
-        "================================="
-      );
-
       console.log(
         "PDF UPLOAD REQUEST"
       );
 
       if (!req.file) {
-
         return res
           .status(400)
           .json({
-
-            success:
-              false,
+            success: false,
 
             message:
               "Please select a PDF file.",
@@ -846,13 +871,11 @@ app.post(
         );
 
       const extractedText =
-        pdfData.text ||
-        "";
+        pdfData.text || "";
 
       uploadedDocuments[
         req.file.filename
       ] = {
-
         originalName:
           req.file.originalname,
 
@@ -863,21 +886,14 @@ app.post(
           extractedText,
 
         totalPages:
-          pdfData.numpages ||
-          0,
+          pdfData.numpages || 0,
 
         uploadedAt:
           new Date(),
       };
 
-      console.log(
-        "PDF uploaded successfully."
-      );
-
       return res.json({
-
-        success:
-          true,
+        success: true,
 
         message:
           "PDF uploaded successfully.",
@@ -889,15 +905,12 @@ app.post(
           req.file.originalname,
 
         totalPages:
-          pdfData.numpages ||
-          0,
+          pdfData.numpages || 0,
 
         textLength:
           extractedText.length,
       });
-
     } catch (error) {
-
       console.error(
         "PDF Upload Error:",
         error
@@ -906,9 +919,7 @@ app.post(
       return res
         .status(500)
         .json({
-
-          success:
-            false,
+          success: false,
 
           message:
             error.message ||
@@ -919,38 +930,29 @@ app.post(
 );
 
 // ==========================================
-// STUDY EXPLAIN ROUTE
+// STUDY EXPLAIN
 // ==========================================
 
 app.post(
   "/api/study/explain",
-
-  async (
-    req,
-    res
-  ) => {
-
+  async (req, res) => {
     try {
-
       console.log(
         "STUDY EXPLAIN REQUEST"
       );
 
       const topic =
         cleanText(
-          req.body.topic
+          req.body?.topic
         );
 
       const fileName =
         cleanText(
-          req.body.fileName
+          req.body?.fileName
         );
 
-      let pdfContent =
-        "";
-
-      let pdfInfo =
-        null;
+      let pdfContent = "";
+      let pdfInfo = null;
 
       if (
         fileName &&
@@ -958,28 +960,23 @@ app.post(
           fileName
         ]
       ) {
-
         pdfInfo =
           uploadedDocuments[
             fileName
           ];
 
         pdfContent =
-          pdfInfo.text ||
-          "";
+          pdfInfo.text || "";
       }
 
       if (
         !topic &&
         !pdfContent
       ) {
-
         return res
           .status(400)
           .json({
-
-            success:
-              false,
+            success: false,
 
             message:
               "Please enter a topic or upload a PDF.",
@@ -987,10 +984,8 @@ app.post(
       }
 
       if (
-        pdfContent.length >
-        25000
+        pdfContent.length > 25000
       ) {
-
         pdfContent =
           pdfContent.substring(
             0,
@@ -1008,16 +1003,13 @@ You are an expert teacher.
 Create detailed and easy study notes.
 
 TOPIC:
-
 ${finalTopic}
 `;
 
       if (pdfContent) {
-
         prompt += `
 
 PDF CONTENT:
-
 ${pdfContent}
 `;
       }
@@ -1027,23 +1019,15 @@ ${pdfContent}
 Use the following structure:
 
 # Introduction
-
 # Definition
-
 # Important Concepts
-
 # Detailed Explanation
-
 # Examples
-
 # Applications
-
 # Key Points
-
 # Summary
 
 Rules:
-
 - Use simple English.
 - Make content beginner friendly.
 - Explain step by step.
@@ -1057,15 +1041,12 @@ Rules:
         );
 
       return res.json({
-
-        success:
-          true,
+        success: true,
 
         topic:
           finalTopic,
 
-        explanation:
-          explanation,
+        explanation,
 
         content:
           explanation,
@@ -1073,7 +1054,6 @@ Rules:
         file:
           pdfInfo
             ? {
-
                 fileName:
                   pdfInfo.savedName,
 
@@ -1085,9 +1065,7 @@ Rules:
               }
             : null,
       });
-
     } catch (error) {
-
       console.error(
         "Study Explain Error:",
         error
@@ -1095,12 +1073,11 @@ Rules:
 
       return res
         .status(
-          getErrorStatus(error) || 500
+          getErrorStatus(error) ||
+            500
         )
         .json({
-
-          success:
-            false,
+          success: false,
 
           message:
             error.message ||
@@ -1111,40 +1088,33 @@ Rules:
 );
 
 // ==========================================
-// VIDEO GENERATE ROUTE
+// VIDEO GENERATE
 // ==========================================
 
 app.post(
   "/api/video/generate",
-
-  async (
-    req,
-    res
-  ) => {
-
+  async (req, res) => {
     try {
-
       console.log(
         "VIDEO GENERATE REQUEST"
       );
 
       const topic =
         cleanText(
-          req.body.topic
+          req.body?.topic
         );
 
       const fileName =
         cleanText(
-          req.body.fileName
+          req.body?.fileName
         );
 
       const explanation =
         cleanText(
-          req.body.explanation
+          req.body?.explanation
         );
 
-      let pdfContent =
-        "";
+      let pdfContent = "";
 
       if (
         fileName &&
@@ -1152,12 +1122,10 @@ app.post(
           fileName
         ]
       ) {
-
         pdfContent =
           uploadedDocuments[
             fileName
-          ].text ||
-          "";
+          ].text || "";
       }
 
       const sourceContent =
@@ -1172,13 +1140,10 @@ app.post(
         !topic &&
         !sourceContent
       ) {
-
         return res
           .status(400)
           .json({
-
-            success:
-              false,
+            success: false,
 
             message:
               "Please provide study content first.",
@@ -1197,11 +1162,9 @@ You are an expert teacher.
 Create a spoken educational lesson.
 
 TOPIC:
-
 ${finalTopic}
 
 STUDY MATERIAL:
-
 ${limitedContent}
 
 Return ONLY valid JSON.
@@ -1221,7 +1184,6 @@ Use this format:
 }
 
 Rules:
-
 - Create 5 to 8 slides.
 - Use simple English.
 - Explain naturally.
@@ -1235,37 +1197,29 @@ Rules:
           prompt
         );
 
-      let parsedData =
-        null;
+      let parsedData = null;
 
       try {
-
         parsedData =
           JSON.parse(
             cleanJsonText(
               aiResponse
             )
           );
-
       } catch (error) {
-
         console.log(
           "JSON parsing failed. Using fallback slides."
         );
       }
 
-      let videoScript =
-        "";
-
-      let slides =
-        [];
+      let videoScript = "";
+      let slides = [];
 
       if (
         parsedData &&
         typeof parsedData ===
           "object"
       ) {
-
         videoScript =
           parsedData.videoScript ||
           "";
@@ -1275,7 +1229,6 @@ Rules:
             parsedData.slides
           )
         ) {
-
           slides =
             parsedData.slides
               .filter(
@@ -1284,13 +1237,9 @@ Rules:
                   slide.title &&
                   slide.narration
               )
-              .slice(
-                0,
-                8
-              )
+              .slice(0, 8)
               .map(
                 (slide) => ({
-
                   title:
                     String(
                       slide.title
@@ -1306,7 +1255,6 @@ Rules:
       }
 
       if (!videoScript) {
-
         videoScript =
           sourceContent ||
           aiResponse;
@@ -1315,7 +1263,6 @@ Rules:
       if (
         slides.length === 0
       ) {
-
         slides =
           createFallbackSlides(
             videoScript,
@@ -1335,18 +1282,14 @@ Rules:
         );
 
       return res.json({
-
-        success:
-          true,
+        success: true,
 
         message:
           "AI teacher lesson generated successfully.",
 
-        videoScript:
-          videoScript,
+        videoScript,
 
-        slides:
-          slides,
+        slides,
 
         videoAvailable:
           videoExists,
@@ -1357,9 +1300,7 @@ Rules:
               "/assets/teacher-classroom.mp4"
             : "",
       });
-
     } catch (error) {
-
       const status =
         getErrorStatus(error);
 
@@ -1372,24 +1313,21 @@ Rules:
         error.message ||
         "Video generation failed.";
 
-      if (
-        status === 503
-      ) {
+      if (status === 429) {
         message =
-          "The AI service is temporarily busy. Please try again in a few moments.";
+          "Gemini quota/rate limit reached. Please try again later.";
+      }
+
+      if (status === 503) {
+        message =
+          "The AI service is temporarily busy. Please try again later.";
       }
 
       return res
-        .status(
-          status || 500
-        )
+        .status(status || 500)
         .json({
-
-          success:
-            false,
-
-          message:
-            message,
+          success: false,
+          message,
         });
     }
   }
@@ -1401,14 +1339,8 @@ Rules:
 
 app.get(
   "/api/teacher-video",
-
-  (
-    req,
-    res
-  ) => {
-
+  (req, res) => {
     try {
-
       const videoPath =
         path.join(
           assetsDir,
@@ -1420,13 +1352,10 @@ app.get(
           videoPath
         )
       ) {
-
         return res
           .status(404)
           .json({
-
-            success:
-              false,
+            success: false,
 
             message:
               "teacher-classroom.mp4 was not found.",
@@ -1434,23 +1363,17 @@ app.get(
       }
 
       return res.json({
-
-        success:
-          true,
+        success: true,
 
         videoUrl:
           getBaseUrl(req) +
           "/assets/teacher-classroom.mp4",
       });
-
     } catch (error) {
-
       return res
         .status(500)
         .json({
-
-          success:
-            false,
+          success: false,
 
           message:
             error.message,
@@ -1460,28 +1383,26 @@ app.get(
 );
 
 // ==========================================
-// GENERATE MCQ QUIZ
+// MCQ QUIZ
 // ==========================================
 
 app.post(
   "/api/study/mcq",
-
-  async (
-    req,
-    res
-  ) => {
-
+  async (req, res) => {
     try {
+      console.log(
+        "MCQ GENERATE REQUEST"
+      );
 
       const topic =
         cleanText(
-          req.body.topic
+          req.body?.topic
         ) ||
         "Study Topic";
 
       const explanation =
         cleanText(
-          req.body.explanation
+          req.body?.explanation
         );
 
       const content =
@@ -1494,11 +1415,9 @@ app.post(
 Create an educational multiple choice quiz.
 
 TOPIC:
-
 ${topic}
 
 STUDY NOTES:
-
 ${content}
 
 Return ONLY valid JSON in this format:
@@ -1520,7 +1439,6 @@ Return ONLY valid JSON in this format:
 }
 
 Rules:
-
 - Generate exactly 10 questions.
 - Every question must have exactly 4 options.
 - correctAnswer must be 0, 1, 2, or 3.
@@ -1553,13 +1471,9 @@ Rules:
 
       const questions =
         quizData.questions
-          .slice(
-            0,
-            10
-          )
+          .slice(0, 10)
           .map(
             (item) => ({
-
               question:
                 String(
                   item.question ||
@@ -1601,31 +1515,42 @@ Rules:
           )
           .filter(
             (item) =>
-              item.options.length === 4
+              item.options.length ===
+              4
           );
 
       return res.json({
         success: true,
         questions,
       });
-
     } catch (error) {
+      const status =
+        getErrorStatus(error);
 
       console.error(
         "MCQ Error:",
         error
       );
 
+      let message =
+        error.message ||
+        "Failed to generate quiz.";
+
+      if (status === 429) {
+        message =
+          "Gemini quota/rate limit reached. Please try again later.";
+      }
+
+      if (status === 503) {
+        message =
+          "Gemini AI service is temporarily busy. Please try again later.";
+      }
+
       return res
-        .status(
-          getErrorStatus(error) ||
-          500
-        )
+        .status(status || 500)
         .json({
           success: false,
-          message:
-            error.message ||
-            "Failed to generate quiz.",
+          message,
         });
     }
   }
@@ -1637,23 +1562,17 @@ Rules:
 
 app.post(
   "/api/download/notes",
-
-  (
-    req,
-    res
-  ) => {
-
+  (req, res) => {
     try {
-
       const topic =
         cleanText(
-          req.body.topic
+          req.body?.topic
         ) ||
         "Study Notes";
 
       const explanation =
         cleanText(
-          req.body.explanation
+          req.body?.explanation
         );
 
       const safeTopic =
@@ -1694,9 +1613,7 @@ ${explanation}
       return res.send(
         content
       );
-
     } catch (error) {
-
       console.error(
         "Notes Download Error:",
         error
@@ -1706,6 +1623,7 @@ ${explanation}
         .status(500)
         .json({
           success: false,
+
           message:
             error.message ||
             "Failed to download notes.",
@@ -1720,12 +1638,7 @@ ${explanation}
 
 app.get(
   "/api/download/video",
-
-  (
-    req,
-    res
-  ) => {
-
+  (req, res) => {
     const videoPath =
       path.join(
         assetsDir,
@@ -1737,13 +1650,10 @@ app.get(
         videoPath
       )
     ) {
-
       return res
         .status(404)
         .json({
-
-          success:
-            false,
+          success: false,
 
           message:
             "Teacher video file was not found.",
@@ -1765,17 +1675,11 @@ app.get(
 // ==========================================
 
 app.use(
-  (
-    req,
-    res
-  ) => {
-
+  (req, res) => {
     return res
       .status(404)
       .json({
-
-        success:
-          false,
+        success: false,
 
         message:
           "API route not found.",
@@ -1800,7 +1704,6 @@ app.use(
     res,
     next
   ) => {
-
     console.error(
       "SERVER ERROR:",
       error
@@ -1810,13 +1713,10 @@ app.use(
       error instanceof
       multer.MulterError
     ) {
-
       return res
         .status(400)
         .json({
-
-          success:
-            false,
+          success: false,
 
           message:
             error.message,
@@ -1826,9 +1726,7 @@ app.use(
     return res
       .status(500)
       .json({
-
-        success:
-          false,
+        success: false,
 
         message:
           error.message ||
@@ -1838,111 +1736,61 @@ app.use(
 );
 
 // ==========================================
-// START LOCAL SERVER
+// START SERVER
 // ==========================================
 
-if (
-  require.main === module
-) {
+app.listen(
+  PORT,
+  () => {
+    console.log(
+      "================================="
+    );
 
-  // ==========================================
-// AI CHAT ENDPOINT
-// ==========================================
+    console.log(
+      `Server running on port ${PORT}`
+    );
 
-app.post("/api/ai/chat", async (req, res) => {
-  try {
-    const { message, language = "English" } = req.body;
+    console.log(
+      `Backend: http://localhost:${PORT}`
+    );
 
-    if (!message || !message.trim()) {
-      return res.status(400).json({
-        success: false,
-        error: "Message is required.",
-      });
-    }
+    console.log(
+      `Health Check: http://localhost:${PORT}/api/health`
+    );
 
-    if (!genAI) {
-      return res.status(500).json({
-        success: false,
-        error: "Gemini AI is not configured.",
-      });
-    }
+    console.log(
+      `AI Chat: http://localhost:${PORT}/api/ai/chat`
+    );
 
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-    });
+    console.log(
+      `Study Generate: http://localhost:${PORT}/api/study/generate`
+    );
 
-    const prompt = `
-You are an AI Teacher.
-Explain the student's question clearly and step-by-step.
-Use simple language suitable for a student.
-Preferred language: ${language}
+    console.log(
+      `MCQ: http://localhost:${PORT}/api/study/mcq`
+    );
 
-Student question:
-${message}
-`;
+    console.log(
+      `Teacher Video: http://localhost:${PORT}/api/teacher-video`
+    );
 
-    const result = await model.generateContent(prompt);
+    console.log(
+      `Gemini AI: ${
+        genAI
+          ? "READY"
+          : "NOT CONFIGURED"
+      }`
+    );
 
-    const reply = result.response.text();
+    console.log(
+      `Gemini Model: ${GEMINI_MODEL}`
+    );
 
-    res.json({
-      success: true,
-      reply,
-    });
-
-  } catch (error) {
-    console.error("AI CHAT ERROR:", error);
-
-    res.status(500).json({
-      success: false,
-      error: error.message || "AI response failed.",
-    });
+    console.log(
+      "================================="
+    );
   }
-});
-
-
-  app.listen(
-    PORT,
-    () => {
-
-      console.log(
-        "================================="
-      );
-
-      console.log(
-        `Server running on port ${PORT}`
-      );
-
-      console.log(
-        `Backend: http://localhost:${PORT}`
-      );
-
-      console.log(
-        `Health Check: http://localhost:${PORT}/api/health`
-      );
-
-      console.log(
-        `Study Generate: http://localhost:${PORT}/api/study/generate`
-      );
-
-      console.log(
-        `Gemini AI: ${
-          genAI
-            ? "READY"
-            : "NOT CONFIGURED"
-        }`
-      );
-
-      console.log(
-        `Gemini Model: ${GEMINI_MODEL}`
-      );
-
-      console.log(
-        "================================="
-      );
-    }
-  );
-}
+);
 
 // ==========================================
 // EXPORT
