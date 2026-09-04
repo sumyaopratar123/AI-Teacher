@@ -1,6 +1,6 @@
 // ==========================================
 // AI TEACHER - BACKEND SERVER
-// COMPLETE VERSION
+// COMPLETE VERSION WITH GEMINI RETRY
 // ==========================================
 
 require("dotenv").config();
@@ -27,7 +27,6 @@ const PORT = process.env.PORT || 5000;
 // MIDDLEWARE
 // ==========================================
 
-// CORS
 app.use(
   cors({
     origin: true,
@@ -46,14 +45,12 @@ app.use(
   })
 );
 
-// JSON body
 app.use(
   express.json({
     limit: "50mb",
   })
 );
 
-// URL encoded body
 app.use(
   express.urlencoded({
     extended: true,
@@ -75,21 +72,18 @@ const assetsDir = path.join(
   "assets"
 );
 
-// Create uploads directory
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, {
     recursive: true,
   });
 }
 
-// Create assets directory
 if (!fs.existsSync(assetsDir)) {
   fs.mkdirSync(assetsDir, {
     recursive: true,
   });
 }
 
-// Static assets
 app.use(
   "/assets",
   express.static(assetsDir)
@@ -108,7 +102,6 @@ const GEMINI_MODEL =
 
 let genAI = null;
 
-// Check Gemini key
 if (
   GEMINI_API_KEY &&
   GEMINI_API_KEY.trim()
@@ -135,61 +128,135 @@ if (
 }
 
 // ==========================================
+// WAIT HELPER
+// ==========================================
+
+function wait(ms) {
+  return new Promise(
+    (resolve) => setTimeout(resolve, ms)
+  );
+}
+
+// ==========================================
+// GET ERROR STATUS
+// ==========================================
+
+function getErrorStatus(error) {
+  return (
+    error?.status ||
+    error?.response?.status ||
+    null
+  );
+}
+
+// ==========================================
 // AI GENERATE FUNCTION
+// WITH AUTOMATIC RETRY
 // ==========================================
 
 async function generateAIResponse(
   prompt
 ) {
-  // Check Gemini
   if (!genAI) {
     throw new Error(
       "Gemini API is not configured. Please check GEMINI_API_KEY."
     );
   }
 
-  try {
-    console.log(
-      "Using Gemini model:",
-      GEMINI_MODEL
-    );
+  const MAX_RETRIES = 3;
 
-    const model =
-      genAI.getGenerativeModel({
-        model: GEMINI_MODEL,
-      });
+  let lastError = null;
 
-    const result =
-      await model.generateContent(
-        prompt
+  for (
+    let attempt = 1;
+    attempt <= MAX_RETRIES;
+    attempt++
+  ) {
+    try {
+      console.log(
+        `Gemini request attempt ${attempt}/${MAX_RETRIES}`
       );
 
-    const response =
-      result.response;
-
-    const text =
-      response.text();
-
-    if (
-      !text ||
-      !text.trim()
-    ) {
-      throw new Error(
-        "AI did not return a response."
+      console.log(
+        "Using Gemini model:",
+        GEMINI_MODEL
       );
+
+      const model =
+        genAI.getGenerativeModel({
+          model: GEMINI_MODEL,
+        });
+
+      const result =
+        await model.generateContent(
+          prompt
+        );
+
+      const response =
+        result.response;
+
+      const text =
+        response.text();
+
+      if (
+        !text ||
+        !text.trim()
+      ) {
+        throw new Error(
+          "AI did not return a response."
+        );
+      }
+
+      console.log(
+        "Gemini response generated successfully."
+      );
+
+      return text.trim();
+
+    } catch (error) {
+      lastError = error;
+
+      const status =
+        getErrorStatus(error);
+
+      console.error(
+        `Gemini attempt ${attempt} failed.`,
+        {
+          status,
+          message:
+            error.message,
+        }
+      );
+
+      const isTemporaryError =
+        status === 429 ||
+        status === 500 ||
+        status === 502 ||
+        status === 503 ||
+        status === 504;
+
+      if (
+        !isTemporaryError ||
+        attempt === MAX_RETRIES
+      ) {
+        break;
+      }
+
+      const delay =
+        attempt * 5000;
+
+      console.log(
+        `Temporary Gemini error. Retrying in ${delay / 1000} seconds...`
+      );
+
+      await wait(delay);
     }
-
-    return text.trim();
-
-  } catch (error) {
-
-    console.error(
-      "Gemini Generate Error:",
-      error.message
-    );
-
-    throw error;
   }
+
+  throw lastError ||
+    new Error(
+      "Failed to generate AI response."
+    );
 }
 
 // ==========================================
@@ -204,7 +271,6 @@ const storage =
       file,
       cb
     ) => {
-
       cb(
         null,
         uploadDir
@@ -227,7 +293,8 @@ const storage =
         Date.now() +
         "-" +
         Math.round(
-          Math.random() * 1000000
+          Math.random() *
+          1000000
         ) +
         "-" +
         safeName;
@@ -286,7 +353,6 @@ const upload =
     fileFilter,
 
     limits: {
-
       fileSize:
         20 *
         1024 *
@@ -298,7 +364,6 @@ const upload =
 // MEMORY STORAGE
 // ==========================================
 
-// Store uploaded PDF information
 const uploadedDocuments = {};
 
 // ==========================================
@@ -329,7 +394,6 @@ function cleanJsonText(text) {
     String(text)
       .trim();
 
-  // Remove markdown code block
   cleaned =
     cleaned.replace(
       /^```json/i,
@@ -351,7 +415,6 @@ function cleanJsonText(text) {
   cleaned =
     cleaned.trim();
 
-  // Find JSON object
   const firstBrace =
     cleaned.indexOf("{");
 
@@ -535,13 +598,11 @@ app.get(
 
 // ==========================================
 // STUDY GENERATE
-// IMPORTANT ROUTE
-// THIS FIXES:
-// POST /api/study/generate
 // ==========================================
 
 app.post(
   "/api/study/generate",
+
   async (
     req,
     res
@@ -561,10 +622,6 @@ app.post(
         "Request Body:",
         req.body
       );
-
-      // ==================================
-      // GET DATA
-      // ==================================
 
       const topic =
         cleanText(
@@ -597,17 +654,9 @@ app.post(
         ) ||
         "20 Minutes";
 
-      // ==================================
-      // FINAL TOPIC
-      // ==================================
-
       const finalTopic =
         topic ||
         subject;
-
-      // ==================================
-      // VALIDATION
-      // ==================================
 
       if (!finalTopic) {
 
@@ -622,10 +671,6 @@ app.post(
               "Please enter a topic.",
           });
       }
-
-      // ==================================
-      // AI PROMPT
-      // ==================================
 
       const prompt = `
 You are an expert AI teacher.
@@ -679,10 +724,6 @@ Rules:
 Generate the lesson now.
 `;
 
-      // ==================================
-      // GENERATE AI RESPONSE
-      // ==================================
-
       const explanation =
         await generateAIResponse(
           prompt
@@ -691,10 +732,6 @@ Generate the lesson now.
       console.log(
         "Study lesson generated successfully."
       );
-
-      // ==================================
-      // RESPONSE
-      // ==================================
 
       return res
         .status(200)
@@ -733,7 +770,9 @@ Generate the lesson now.
       );
 
       return res
-        .status(500)
+        .status(
+          getErrorStatus(error) || 500
+        )
         .json({
 
           success:
@@ -773,7 +812,6 @@ app.post(
         "PDF UPLOAD REQUEST"
       );
 
-      // Check file
       if (!req.file) {
 
         return res
@@ -788,13 +826,11 @@ app.post(
           });
       }
 
-      // Read PDF
       const pdfBuffer =
         fs.readFileSync(
           req.file.path
         );
 
-      // Parse PDF
       const pdfData =
         await pdfParse(
           pdfBuffer
@@ -804,7 +840,6 @@ app.post(
         pdfData.text ||
         "";
 
-      // Store document
       uploadedDocuments[
         req.file.filename
       ] = {
@@ -908,7 +943,6 @@ app.post(
       let pdfInfo =
         null;
 
-      // Get PDF content
       if (
         fileName &&
         uploadedDocuments[
@@ -926,7 +960,6 @@ app.post(
           "";
       }
 
-      // Validation
       if (
         !topic &&
         !pdfContent
@@ -944,7 +977,6 @@ app.post(
           });
       }
 
-      // Limit PDF content
       if (
         pdfContent.length >
         25000
@@ -957,12 +989,10 @@ app.post(
           );
       }
 
-      // Subject
       const finalTopic =
         topic ||
         "Study Material";
 
-      // Prompt
       let prompt = `
 You are an expert teacher.
 
@@ -973,9 +1003,7 @@ TOPIC:
 ${finalTopic}
 `;
 
-      if (
-        pdfContent
-      ) {
+      if (pdfContent) {
 
         prompt += `
 
@@ -1014,13 +1042,11 @@ Rules:
 - Make content useful for exams.
 `;
 
-      // Generate
       const explanation =
         await generateAIResponse(
           prompt
         );
 
-      // Response
       return res.json({
 
         success:
@@ -1059,7 +1085,9 @@ Rules:
       );
 
       return res
-        .status(500)
+        .status(
+          getErrorStatus(error) || 500
+        )
         .json({
 
           success:
@@ -1109,7 +1137,6 @@ app.post(
       let pdfContent =
         "";
 
-      // Get PDF
       if (
         fileName &&
         uploadedDocuments[
@@ -1132,7 +1159,6 @@ app.post(
         topic ||
         "AI Learning Lesson";
 
-      // Validation
       if (
         !topic &&
         !sourceContent
@@ -1150,14 +1176,12 @@ app.post(
           });
       }
 
-      // Limit
       const limitedContent =
         sourceContent.substring(
           0,
           18000
         );
 
-      // AI prompt
       const prompt = `
 You are an expert teacher.
 
@@ -1197,7 +1221,6 @@ Rules:
 - Last slide gives a summary.
 `;
 
-      // Generate AI
       const aiResponse =
         await generateAIResponse(
           prompt
@@ -1206,7 +1229,6 @@ Rules:
       let parsedData =
         null;
 
-      // Parse JSON
       try {
 
         parsedData =
@@ -1219,7 +1241,7 @@ Rules:
       } catch (error) {
 
         console.log(
-          "JSON parsing failed."
+          "JSON parsing failed. Using fallback slides."
         );
       }
 
@@ -1229,7 +1251,6 @@ Rules:
       let slides =
         [];
 
-      // If JSON successful
       if (
         parsedData &&
         typeof parsedData ===
@@ -1275,10 +1296,7 @@ Rules:
         }
       }
 
-      // Fallback
-      if (
-        !videoScript
-      ) {
+      if (!videoScript) {
 
         videoScript =
           sourceContent ||
@@ -1296,7 +1314,6 @@ Rules:
           );
       }
 
-      // Check video
       const videoPath =
         path.join(
           assetsDir,
@@ -1308,7 +1325,6 @@ Rules:
           videoPath
         );
 
-      // Response
       return res.json({
 
         success:
@@ -1335,21 +1351,36 @@ Rules:
 
     } catch (error) {
 
+      const status =
+        getErrorStatus(error);
+
       console.error(
         "Video Generation Error:",
         error
       );
 
+      let message =
+        error.message ||
+        "Video generation failed.";
+
+      if (
+        status === 503
+      ) {
+        message =
+          "The AI service is temporarily busy. Please try again in a few moments.";
+      }
+
       return res
-        .status(500)
+        .status(
+          status || 500
+        )
         .json({
 
           success:
             false,
 
           message:
-            error.message ||
-            "Video generation failed.",
+            message,
         });
     }
   }
@@ -1375,7 +1406,6 @@ app.get(
           "teacher-classroom.mp4"
         );
 
-      // Check
       if (
         !fs.existsSync(
           videoPath
@@ -1466,7 +1496,6 @@ app.use(
       error
     );
 
-    // Multer error
     if (
       error instanceof
       multer.MulterError
