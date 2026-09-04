@@ -840,23 +840,79 @@ function Study() {
   // ==========================================
 
   const handleGenerateQuiz =
-    () => {
+  async () => {
 
-      setError("");
+    setError("");
 
-      if (
-        questions.length === 0
-      ) {
+    if (!explanation) {
 
-        setError(
+      setError(
+        "Please generate study notes first."
+      );
 
-          "No quiz questions were generated."
+      return;
 
+    }
+
+    try {
+
+      setLoading(true);
+
+      const response =
+        await fetch(
+          `${API_URL}/study/mcq`,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                topic,
+                explanation,
+              }),
+          }
         );
 
-        return;
+      const data =
+        await parseResponse(
+          response
+        );
+
+      console.log(
+        "MCQ Response:",
+        data
+      );
+
+      if (
+        !response.ok ||
+        !data.success
+      ) {
+
+        throw new Error(
+          data.message ||
+          "Failed to generate MCQ quiz."
+        );
 
       }
+
+      if (
+        !data.questions ||
+        data.questions.length === 0
+      ) {
+
+        throw new Error(
+          "No MCQ questions generated."
+        );
+
+      }
+
+      setQuestions(
+        data.questions
+      );
 
       setSelectedAnswers(
         {}
@@ -879,10 +935,28 @@ function Study() {
             });
 
         },
-        100
+        300
       );
 
-    };
+    } catch (error) {
+
+      console.error(
+        "MCQ Error:",
+        error
+      );
+
+      setError(
+        error.message ||
+        "Failed to generate MCQ quiz."
+      );
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  };
 
   // ==========================================
   // SELECT ANSWER
