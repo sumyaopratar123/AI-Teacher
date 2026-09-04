@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Navbar from "../components/Navbar";
 import "./AIChat.css";
 
-const API_URL = "https://ai-teacher-backend-gjdi.onrender.com";
+const API_URL = "https://ai-teacher-backend-gjdj.onrender.com";
 
 function AIChat() {
   const [input, setInput] = useState("");
