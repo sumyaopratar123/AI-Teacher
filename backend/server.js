@@ -1845,6 +1845,62 @@ if (
   require.main === module
 ) {
 
+  // ==========================================
+// AI CHAT ENDPOINT
+// ==========================================
+
+app.post("/api/ai/chat", async (req, res) => {
+  try {
+    const { message, language = "English" } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "Message is required.",
+      });
+    }
+
+    if (!genAI) {
+      return res.status(500).json({
+        success: false,
+        error: "Gemini AI is not configured.",
+      });
+    }
+
+    const model = genAI.getGenerativeModel({
+      model: GEMINI_MODEL,
+    });
+
+    const prompt = `
+You are an AI Teacher.
+Explain the student's question clearly and step-by-step.
+Use simple language suitable for a student.
+Preferred language: ${language}
+
+Student question:
+${message}
+`;
+
+    const result = await model.generateContent(prompt);
+
+    const reply = result.response.text();
+
+    res.json({
+      success: true,
+      reply,
+    });
+
+  } catch (error) {
+    console.error("AI CHAT ERROR:", error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message || "AI response failed.",
+    });
+  }
+});
+
+
   app.listen(
     PORT,
     () => {
