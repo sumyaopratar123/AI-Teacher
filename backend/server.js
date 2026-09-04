@@ -21,6 +21,7 @@ const {
 // ==========================================
 
 const app = express();
+app.set("trust proxy", 1);
 
 const PORT = process.env.PORT || 5000;
 
@@ -445,8 +446,13 @@ function cleanJsonText(text) {
 
 function getBaseUrl(req) {
 
+  const protocol =
+    req.get("x-forwarded-proto") ||
+    req.protocol ||
+    "https";
+
   return (
-    req.protocol +
+    protocol +
     "://" +
     req.get("host")
   );
