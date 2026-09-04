@@ -11,6 +11,9 @@ import "./Study.css";
 const API_URL =
   "https://ai-teacher-backend-gjdj.onrender.com/api";
 
+const BACKEND_URL =
+  API_URL.replace(/\/api$/, "");
+
 const STORAGE_KEY =
   "ai_teacher_study_session";
 
@@ -300,8 +303,26 @@ function Study() {
             data.videoUrl
           ) {
 
+            const rawVideoUrl =
+              String(data.videoUrl).trim();
+
+            const absoluteVideoUrl =
+              rawVideoUrl.startsWith("http")
+                ? rawVideoUrl.replace(/^http:/, "https:")
+                : `${BACKEND_URL}${
+                    rawVideoUrl.startsWith("/")
+                      ? rawVideoUrl
+                      : `/${rawVideoUrl}`
+                  }`;
+
             setVideoUrl(
-              data.videoUrl
+              absoluteVideoUrl
+            );
+
+          } else {
+
+            setVideoUrl(
+              `${BACKEND_URL}/assets/teacher-classroom.mp4`
             );
 
           }
@@ -311,6 +332,10 @@ function Study() {
           console.error(
             "Teacher video error:",
             error
+          );
+
+          setVideoUrl(
+            `${BACKEND_URL}/assets/teacher-classroom.mp4`
           );
 
         }
@@ -2518,6 +2543,8 @@ function Study() {
 
                   src={videoUrl}
 
+                  autoPlay
+
                   muted
 
                   loop
@@ -2526,11 +2553,33 @@ function Study() {
 
                   controls
 
+                  preload="auto"
+
                   onLoadedMetadata={
                     handleVideoMetadata
                   }
 
+                  onCanPlay={() => {
+                    setError("");
+                    videoRef.current?.play().catch(() => {});
+                  }}
+
+                  onError={() => {
+                    setError(
+                      "Teacher video could not be loaded. Please check backend/assets/teacher-classroom.mp4."
+                    );
+                  }}
+
                   className="teacher-video"
+
+                  style={{
+                    width: "100%",
+                    maxWidth: "100%",
+                    display: "block",
+                    minHeight: "280px",
+                    background: "#000",
+                    objectFit: "cover",
+                  }}
                 >
 
                   Your browser does not support video.
